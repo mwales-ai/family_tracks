@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}{{ workout.name or "Workout" }} - Family Tracks{% endblock %}
+
+{% block content %}
+<div class="workout-detail-container">
+    <h2>{{ workout.name or "Workout" }}</h2>
+    <p class="workout-meta">
+        {{ workout.displayName }} &mdash;
+        {{ workout.workoutType or "general" }} &mdash;
+        {{ workout.startTime }}
+        {% if workout.endTime %} to {{ workout.endTime }}{% endif %}
+    </p>
+
+    <div class="workout-layout">
+        <div class="workout-map-wrap">
+            <div id="workoutMap"></div>
+        </div>
+        <div class="workout-stats">
+            <h3>Stats</h3>
+            <div id="statsPanel">Loading...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    var workoutMap = L.map('workoutMap').setView([39.8283, -98.5795], 4);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(workoutMap);
+
+    fetch('/api/workouts/{{ workout.id }}/data')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.length === 0) {
+                document.getElementById('statsPanel').innerHTML = '<p>No data points recorded.</p>';
+                return;
+            }
+
+            // Build polyline colored by speed
+            var points = [];
+            var maxSpeed = 0;
+            var totalSpeed = 0;
+            var maxHr = 0;
+            var totalHr = 0;
+            var hrCount = 0;
+            var minAlt = null;
+            var maxAlt = null;
+            var temps = [];
+            var humids = [];
+
+            data.forEach(function(p) {
+                points.push([p.latitude, p.longitude]);
+
+                if (p.speed !== null) {
+                    if (p.speed > maxSpeed) maxSpeed = p.speed;
+                    totalSpeed += p.speed;
+                }
+
+                if (p.heartRate !== null) {
+                    if (p.heartRate > maxHr) maxHr = p.heartRate;
+                    totalHr += p.heartRate;
+                    hrCount++;
+                }
+
+                if (p.altitude !== null) {
+                    if (minAlt === null || p.altitude < minAlt) minAlt = p.altitude;
+                    if (maxAlt === null || p.altitude > maxAlt) maxAlt = p.altitude;
+                }
+
+                if (p.temperature !== null) temps.push(p.temperature);
+                if (p.humidity !== null) humids.push(p.humidity);
+            });
+
+            // Draw route
+            var line = L.polyline(points, {
+                color: '#e74c3c',
+                weight: 4,
+                opacity: 0.8
+            }).addTo(workoutMap);
+
+            // Start marker (green)
+            L.circleMarker(points[0], {
+                radius: 8, color: '#2ecc71', fillColor: '#2ecc71', fillOpacity: 1
+            }).bindPopup('Start').addTo(workoutMap);
+
+            // End marker (red)
+            L.circleMarker(points[points.length - 1], {
+                radius: 8, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 1
+            }).bindPopup('End').addTo(workoutMap);
+
+            workoutMap.fitBounds(line.getBounds().pad(0.1));
+
+            // Calculate duration
+            var startT = new Date(data[0].timestamp);
+            var endT = new Date(data[data.length - 1].timestamp);
+            var durationMin = Math.round((endT - startT) / 60000);
+
+            // Calculate distance (haversine)
+            var totalDist = 0;
+            for (var i = 1; i < data.length; i++) {
+                totalDist += haversine(
+                    data[i-1].latitude, data[i-1].longitude,
+                    data[i].latitude, data[i].longitude
+                );
+            }
+
+            // Build stats HTML
+            var html = '<table class="stats-table">';
+            html += statRow('Duration', durationMin + ' min');
+            html += statRow('Distance', (totalDist / 1000).toFixed(2) + ' km');
+            html += statRow('Data Points', data.length);
+
+            if (maxSpeed > 0) {
+                html += statRow('Avg Speed', (totalSpeed / data.length).toFixed(1) + ' m/s');
+                html += statRow('Max Speed', maxSpeed.toFixed(1) + ' m/s');
+            }
+
+            if (hrCount > 0) {
+                html += statRow('Avg Heart Rate', Math.round(totalHr / hrCount) + ' bpm');
+                html += statRow('Max Heart Rate', maxHr + ' bpm');
+            }
+
+            if (minAlt !== null) {
+                html += statRow('Elevation', minAlt.toFixed(0) + ' - ' + maxAlt.toFixed(0) + ' m');
+                html += statRow('Elevation Gain', (maxAlt - minAlt).toFixed(0) + ' m');
+            }
+
+            if (temps.length > 0) {
+                var avgTemp = temps.reduce(function(a, b) { return a + b; }, 0) / temps.length;
+                html += statRow('Avg Temperature', avgTemp.toFixed(1) + ' &deg;C');
+            }
+
+            if (humids.length > 0) {
+                var avgHum = humids.reduce(function(a, b) { return a + b; }, 0) / humids.length;
+                html += statRow('Avg Humidity', avgHum.toFixed(0) + '%');
+            }
+
+            html += '</table>';
+            document.getElementById('statsPanel').innerHTML = html;
+        });
+
+    function statRow(label, value) {
+        return '<tr><td class="stat-label">' + label + '</td><td class="stat-value">' + value + '</td></tr>';
+    }
+
+    function haversine(lat1, lon1, lat2, lon2) {
+        var R = 6371000;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLon = (lon2 - lon1) * Math.PI / 180;
+        var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+</script>
+{% endblock %}

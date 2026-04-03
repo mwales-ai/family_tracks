@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Workouts - Family Tracks{% endblock %}
+
+{% block content %}
+<div class="workouts-container">
+    <h2>Workouts</h2>
+
+    {% if workouts %}
+    <div class="card">
+        <table class="user-table">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Started</th>
+                    <th>Ended</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in workouts %}
+                <tr>
+                    <td>{{ w.displayName }}</td>
+                    <td>{{ w.name or "Workout" }}</td>
+                    <td>{{ w.workoutType or "general" }}</td>
+                    <td>{{ w.startTime }}</td>
+                    <td>{{ w.endTime or "In progress" }}</td>
+                    <td>
+                        <a href="{{ url_for('workoutDetail', workoutId=w.id) }}"
+                           class="btn btn-small btn-primary">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card">
+        <p>No workouts recorded yet. Start a workout from the mobile app to see data here.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

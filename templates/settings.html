@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Settings - Family Tracks{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <h2>User Settings</h2>
+
+    <div class="card">
+        <h3>Change Password</h3>
+        <form method="POST" class="settings-form">
+            <div class="form-group">
+                <label for="newPassword">New Password</label>
+                <input type="password" id="newPassword" name="newPassword" required>
+            </div>
+            <div class="form-group">
+                <label for="confirmPassword">Confirm Password</label>
+                <input type="password" id="confirmPassword" name="confirmPassword" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Update Password</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Geofences</h3>
+        <p>Named locations (home, work, etc.) shown on your map. Click the map to place a geofence.</p>
+
+        {% if geofences %}
+        <table class="user-table" style="margin-bottom: 16px;">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                    <th>Radius (m)</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in geofences %}
+                <tr>
+                    <td>{{ f.name }}</td>
+                    <td>{{ f.latitude }}</td>
+                    <td>{{ f.longitude }}</td>
+                    <td>{{ f.radiusMeters }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('deleteGeofence', fenceId=f.id) }}"
+                              onsubmit="return confirm('Delete geofence {{ f.name }}?');">
+                            <button type="submit" class="btn btn-small btn-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        <div id="geoMap" class="geofence-map"></div>
+
+        <form method="POST" action="{{ url_for('addGeofence') }}" id="geofenceForm">
+            <div class="geofence-controls">
+                <div class="form-group">
+                    <label for="geoName">Name</label>
+                    <input type="text" id="geoName" name="name" placeholder="Home" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="geoLat">Latitude</label>
+                        <input type="text" id="geoLat" name="latitude" readonly required>
+                    </div>
+                    <div class="form-group">
+                        <label for="geoLon">Longitude</label>
+                        <input type="text" id="geoLon" name="longitude" readonly required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="geoRadiusSlider">Radius: <span id="radiusDisplay">100</span> m</label>
+                    <input type="range" id="geoRadiusSlider" min="25" max="2000" value="100" step="25">
+                    <input type="hidden" id="geoRadius" name="radius" value="100">
+                </div>
+                <button type="submit" class="btn btn-primary" id="addGeofenceBtn" disabled>
+                    Click map to place geofence
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Location Data</h3>
+        <p>Delete all your location history. This cannot be undone.</p>
+        <form method="POST" action="{{ url_for('deleteHistory') }}"
+              onsubmit="return confirm('Delete ALL your location history? This cannot be undone.');">
+            <button type="submit" class="btn btn-danger">Delete All History</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    var geoMap = L.map('geoMap').setView([39.8283, -98.5795], 4);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(geoMap);
+
+    var pickerMarker = null;
+    var pickerCircle = null;
+
+    // Draw existing geofences on the map
+    var existingFences = [
+        {% for f in geofences %}
+        { name: "{{ f.name }}", lat: {{ f.latitude }}, lon: {{ f.longitude }}, radius: {{ f.radiusMeters }} },
+        {% endfor %}
+    ];
+
+    existingFences.forEach(function(f) {
+        L.circle([f.lat, f.lon], {
+            radius: f.radius,
+            color: '#9b59b6',
+            fillColor: '#9b59b6',
+            fillOpacity: 0.1,
+            weight: 2,
+            dashArray: '5, 5'
+        }).addTo(geoMap).bindTooltip(f.name, {permanent: true, direction: 'center', className: 'geofence-label'});
+    });
+
+    // If there are existing fences, fit the map to show them
+    if (existingFences.length > 0) {
+        var bounds = L.latLngBounds(existingFences.map(function(f) { return [f.lat, f.lon]; }));
+        geoMap.fitBounds(bounds.pad(0.3));
+    }
+
+    function getRadius() {
+        return parseInt(document.getElementById('geoRadiusSlider').value);
+    }
+
+    function updatePreview(lat, lon) {
+        var radius = getRadius();
+
+        if (pickerMarker) {
+            pickerMarker.setLatLng([lat, lon]);
+        } else {
+            pickerMarker = L.marker([lat, lon]).addTo(geoMap);
+        }
+
+        if (pickerCircle) {
+            pickerCircle.setLatLng([lat, lon]);
+            pickerCircle.setRadius(radius);
+        } else {
+            pickerCircle = L.circle([lat, lon], {
+                radius: radius,
+                color: '#3498db',
+                fillColor: '#3498db',
+                fillOpacity: 0.15,
+                weight: 2
+            }).addTo(geoMap);
+        }
+
+        document.getElementById('geoLat').value = lat.toFixed(6);
+        document.getElementById('geoLon').value = lon.toFixed(6);
+        document.getElementById('addGeofenceBtn').disabled = false;
+        document.getElementById('addGeofenceBtn').textContent = 'Add Geofence';
+    }
+
+    geoMap.on('click', function(e) {
+        updatePreview(e.latlng.lat, e.latlng.lng);
+    });
+
+    var slider = document.getElementById('geoRadiusSlider');
+    var radiusDisplay = document.getElementById('radiusDisplay');
+    var radiusHidden = document.getElementById('geoRadius');
+
+    slider.oninput = function() {
+        var val = this.value;
+        radiusDisplay.textContent = val;
+        radiusHidden.value = val;
+
+        if (pickerCircle) {
+            pickerCircle.setRadius(parseInt(val));
+        }
+    };
+</script>
+{% endblock %}

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Map - Family Tracks{% endblock %}
+
+{% block content %}
+<div class="map-container">
+    <div id="map"></div>
+    <div class="map-sidebar">
+        <h3>Family Members</h3>
+        <div id="memberList"></div>
+        <hr>
+        <h3>History</h3>
+        <div class="history-controls">
+            <label for="historyUser">User:</label>
+            <select id="historyUser"></select>
+            <label for="historyStart">From:</label>
+            <input type="datetime-local" id="historyStart">
+            <label for="historyEnd">To:</label>
+            <input type="datetime-local" id="historyEnd">
+            <button id="showHistory" class="btn btn-primary">Show Track</button>
+            <button id="clearHistory" class="btn">Clear</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // Initialize map centered on US (user can pan to their area)
+    var map = L.map('map').setView([39.8283, -98.5795], 4);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    var markers = {};
+    var historyLine = null;
+
+    // Color palette for different users
+    var colors = ['#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#f39c12',
+                  '#1abc9c', '#e67e22', '#e91e63'];
+
+    function getColor(index) {
+        return colors[index % colors.length];
+    }
+
+    function formatTime(timestamp) {
+        if (!timestamp) return "Unknown";
+        var d = new Date(timestamp);
+        return d.toLocaleString();
+    }
+
+    function refreshLocations() {
+        fetch('/api/locations/latest')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var memberList = document.getElementById('memberList');
+                var historyUser = document.getElementById('historyUser');
+                memberList.innerHTML = '';
+                historyUser.innerHTML = '';
+
+                data.forEach(function(loc, i) {
+                    var color = getColor(i);
+
+                    // Update or create marker
+                    if (markers[loc.userId]) {
+                        markers[loc.userId].setLatLng([loc.latitude, loc.longitude]);
+                    } else {
+                        var icon = L.divIcon({
+                            className: 'user-marker',
+                            html: '<div style="background:' + color + '">' +
+                                  loc.displayName.charAt(0).toUpperCase() + '</div>',
+                            iconSize: [32, 32],
+                            iconAnchor: [16, 16]
+                        });
+                        markers[loc.userId] = L.marker([loc.latitude, loc.longitude],
+                            {icon: icon}).addTo(map);
+                    }
+
+                    var popupHtml = '<b>' + loc.displayName + '</b><br>' +
+                        'Updated: ' + formatTime(loc.timestamp);
+                    if (loc.speed !== null) popupHtml += '<br>Speed: ' + loc.speed.toFixed(1) + ' m/s';
+                    if (loc.battery !== null) popupHtml += '<br>Battery: ' + Math.round(loc.battery) + '%';
+                    markers[loc.userId].bindPopup(popupHtml);
+
+                    // Sidebar entry
+                    var div = document.createElement('div');
+                    div.className = 'member-entry';
+                    div.innerHTML = '<span class="member-dot" style="background:' + color + '"></span>' +
+                        '<span class="member-name">' + loc.displayName + '</span>' +
+                        '<span class="member-time">' + formatTime(loc.timestamp) + '</span>';
+                    div.onclick = function() {
+                        map.setView([loc.latitude, loc.longitude], 15);
+                        markers[loc.userId].openPopup();
+                    };
+                    memberList.appendChild(div);
+
+                    // History dropdown option
+                    var opt = document.createElement('option');
+                    opt.value = loc.userId;
+                    opt.text = loc.displayName;
+                    historyUser.appendChild(opt);
+                });
+
+                if (data.length > 0 && !map._userPanned) {
+                    var group = L.featureGroup(Object.values(markers));
+                    map.fitBounds(group.getBounds().pad(0.1));
+                    map._userPanned = true;
+                }
+            });
+    }
+
+    // Set default date range to last 24 hours
+    var now = new Date();
+    var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    document.getElementById('historyEnd').value = now.toISOString().slice(0, 16);
+    document.getElementById('historyStart').value = yesterday.toISOString().slice(0, 16);
+
+    document.getElementById('showHistory').onclick = function() {
+        var userId = document.getElementById('historyUser').value;
+        var start = document.getElementById('historyStart').value;
+        var end = document.getElementById('historyEnd').value;
+
+        if (!userId) return;
+
+        var url = '/api/locations/history?userId=' + userId;
+        if (start) url += '&start=' + encodeURIComponent(start);
+        if (end) url += '&end=' + encodeURIComponent(end);
+
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (historyLine) {
+                    map.removeLayer(historyLine);
+                }
+
+                if (data.length === 0) {
+                    alert('No location data found for this time range.');
+                    return;
+                }
+
+                var points = data.map(function(p) {
+                    return [p.latitude, p.longitude];
+                });
+
+                historyLine = L.polyline(points, {
+                    color: '#3498db',
+                    weight: 3,
+                    opacity: 0.8
+                }).addTo(map);
+
+                map.fitBounds(historyLine.getBounds().pad(0.1));
+            });
+    };
+
+    document.getElementById('clearHistory').onclick = function() {
+        if (historyLine) {
+            map.removeLayer(historyLine);
+            historyLine = null;
+        }
+    };
+
+    // Load geofences
+    var geofenceCircles = [];
+    fetch('/api/geofences')
+        .then(function(r) { return r.json(); })
+        .then(function(fences) {
+            fences.forEach(function(f) {
+                var circle = L.circle([f.latitude, f.longitude], {
+                    radius: f.radiusMeters,
+                    color: '#9b59b6',
+                    fillColor: '#9b59b6',
+                    fillOpacity: 0.1,
+                    weight: 2,
+                    dashArray: '5, 5'
+                }).addTo(map);
+                circle.bindTooltip(f.name, {permanent: true, direction: 'center', className: 'geofence-label'});
+                geofenceCircles.push(circle);
+            });
+        });
+
+    // Refresh locations every 30 seconds
+    refreshLocations();
+    setInterval(refreshLocations, 30000);
+</script>
+{% endblock %}

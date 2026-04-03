@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  familytracks:
+    build: .
+    ports:
+      - "${WEB_PORT:-5000}:5000"
+      - "${UDP_PORT:-5555}:5555/udp"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+    restart: unless-stopped
