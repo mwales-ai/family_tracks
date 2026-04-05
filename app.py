@@ -428,9 +428,15 @@ def adminQrCode(userId):
     host = request.host.split(":")[0]
     udpPort = int(os.environ.get("UDP_PORT", 5555))
 
+    # Detect scheme and port from the request
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+    webPort = 443 if scheme == "https" else int(request.host.split(":")[-1]) if ":" in request.host else 80
+
     qrData = json.dumps({
         "host": host,
         "port": udpPort,
+        "web_port": webPort,
+        "scheme": scheme,
         "key": row["aesKey"],
         "user_id": row["userId"]
     })
