@@ -15,31 +15,121 @@ and gives you the piece of mind that your data is safe and UNDER YOUR CONTROL.
 Configure exactly what notification level you want and what data you want to have sent
 out.  No nagging, no ads.
 
-# Setup
+# Server Deployment
 
-Download installer script, the installer script ask you what port number and initial
-password to put on the admin account.  After the setup completes, you can login to
-the web server to manage it. The web server can add users (with or without email)
-and then present a QR code that can be scanned by the mobile app to finish the
-registration process.
+## Prerequisites
 
-To add mobile clients, install the application on mobile device.  Hopefully the app
-can eventually appear in the mobile app stores.  The user can then decide to take
-a picture for their avatar, and then decide how often and what kind of data they
-want to share.
+- A VPS or server with Docker and Docker Compose installed
+- A domain name with an A record pointing to your server's IP
+- Ports 80 (HTTP), 443 (HTTPS), and 5555 (UDP) open in your firewall
 
-* Location (Fine or Course GPS)
-* Reporting Frequency
-* Add Geofence Locations (add a location for home, work, friends)
+## Quick Setup (with HTTPS + Let's Encrypt)
+
+```bash
+git clone https://github.com/mwales-ai/family_tracks.git
+cd family_tracks
+./setup.sh
+```
+
+The setup script will:
+1. Ask for your domain name, UDP port, and admin password
+2. Generate a secret key
+3. Configure nginx as an HTTPS reverse proxy
+4. Obtain a free TLS certificate from Let's Encrypt
+5. Start everything with Docker Compose
+
+After setup, open `https://yourdomain.com` and log in with `admin` and your password.
+
+## Local Development (no HTTPS)
+
+```bash
+# Run directly
+python3 -m pip install -r requirements.txt
+python3 app.py
+
+# Or with Docker
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Default login: `admin` / `admin`
+
+## Manual Docker Setup
+
+If you want to configure things yourself:
+
+```bash
+# Create .env file
+cat > .env << EOF
+DOMAIN=tracks.example.com
+UDP_PORT=5555
+ADMIN_PASSWORD=your-secure-password
+SECRET_KEY=$(openssl rand -hex 32)
+EOF
+
+# Edit nginx.conf — replace YOURDOMAIN with your actual domain
+# Then start
+docker compose up -d
+```
+
+## Certificate Renewal
+
+Certbot runs as a container and auto-renews certificates. To manually renew:
+
+```bash
+docker compose run --rm certbot renew
+docker compose restart nginx
+```
+
+## Firewall Rules
+
+```bash
+# UFW example
+sudo ufw allow 80/tcp    # HTTP (cert renewal)
+sudo ufw allow 443/tcp   # HTTPS
+sudo ufw allow 5555/udp  # Location data
+```
+
+## Architecture
+
+```
+Internet
+  |
+  |--- TCP 443 ---> nginx (HTTPS) ---> Flask app (port 5000)
+  |--- TCP 80  ---> nginx (HTTP, redirects to HTTPS + cert challenges)
+  |--- UDP 5555 --> UDP listener (AES-256-GCM encrypted location packets)
+```
+
+# Adding Users
+
+1. Log into the web admin panel
+2. Go to **Admin** -> **Add User**
+3. Click **QR Code** next to the new user
+4. On the phone, open Family Tracks app -> **Scan QR Code**
+5. The app is now configured and ready to track
+
+# Mobile App Features
+
+* Location (Fine or Coarse GPS)
+* Reporting Frequency (10 seconds to 30 minutes)
+* Geofence Locations (home, work, school, friends)
 * Speed reporting
 * Battery life reporting
+* Avatar photo upload
 * Workout Mode
   * Optional high reporting frequency
   * Environmental data (temperature, humidity, wind)
   * Biometrics collected by phone
 
-The users can then see their location history on the website or from the mobile
-device.  They can delete the location information history, or back it up
+# Privacy
 
-The user can also specify when they are working out so they can track their
-workout data themselves (without sharing it with anyone else!)
+* All location data is AES-256-GCM encrypted end-to-end
+* Data is stored only on YOUR server
+* Map tiles come from OpenStreetMap (they see tile requests, not your location data)
+* No accounts, no tracking, no ads, no data brokers
+* Users can delete their own location history at any time
+* Database backup/restore from admin panel
+
+# Related Repos
+
+- **Android app:** [github.com/mwales-ai/family_tracks_android](https://github.com/mwales-ai/family_tracks_android)
+- **iOS app:** not yet started

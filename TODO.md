@@ -31,9 +31,9 @@
     * [X] Pull-to-refresh
 
 ## Server Security & Polish
-* [ ] HTTPS / TLS support (or reverse proxy instructions for nginx)
-    * [ ] Easy way to make it compatible with LetsEncrypt certificates
-* [ ] Installer script (asks for port, admin password, sets up Docker)
+* [X] HTTPS / TLS support (nginx reverse proxy + Let's Encrypt)
+    * [X] setup.sh script handles cert provisioning automatically
+* [X] Installer script (setup.sh — asks for domain, port, admin password, sets up Docker)
 * [X] Rate limiting on login endpoint to prevent brute force
 * [X] Input validation / sanitization on all form inputs
 * [X] Session timeout configuration (7-day persistent sessions)
