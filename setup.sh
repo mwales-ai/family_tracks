@@ -135,7 +135,10 @@ else
     EMAIL_ARG="--register-unsafely-without-email"
 fi
 
-$DC run --rm certbot certonly \
+docker run --rm \
+    -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
+    -v "$(pwd)/certbot/www:/var/www/certbot" \
+    certbot/certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     ${EMAIL_ARG} \
