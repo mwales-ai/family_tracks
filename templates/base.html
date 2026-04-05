@@ -9,11 +9,12 @@
     {% block head %}{% endblock %}
 </head>
 <body>
-    {% if current_user.is_authenticated %}
+    {% if current_user.is_authenticated and not request.args.get('mobile') %}
     <nav class="navbar">
         <div class="nav-brand">Family Tracks</div>
         <div class="nav-links">
             <a href="{{ url_for('dashboard') }}">Map</a>
+            <a href="{{ url_for('events') }}">Events</a>
             <a href="{{ url_for('workouts') }}">Workouts</a>
             {% if current_user.isAdmin %}
             <a href="{{ url_for('admin') }}">Admin</a>

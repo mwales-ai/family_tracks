@@ -1,6 +1,7 @@
 import socket
 import json
 import base64
+import math
 import threading
 
 from Crypto.Cipher import AES
@@ -8,6 +9,9 @@ from Crypto.Cipher import AES
 from database import getDb
 
 UDP_LISTENER_DEBUG = False
+
+# Track each user's last known geofence state: {dbUserId: set(geofenceId)}
+theUserFenceState = {}
 
 
 def debugLog(msg):
@@ -112,6 +116,68 @@ def storeWorkoutData(dbUserId, loc):
     db.close()
 
 
+def haversineMeters(lat1, lon1, lat2, lon2):
+    """Distance in meters between two lat/lon points."""
+    R = 6371000
+    dLat = math.radians(lat2 - lat1)
+    dLon = math.radians(lon2 - lon1)
+    a = (math.sin(dLat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dLon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def checkGeofences(dbUserId, loc):
+    """Check if user entered or exited any geofence. Record events."""
+    lat = loc.get("lat")
+    lon = loc.get("lon")
+    ts = loc.get("ts")
+    if lat is None or lon is None:
+        return
+
+    db = getDb()
+
+    # Get ALL geofences (not just this user's — parents want to know
+    # when kids arrive at the kid's own geofences)
+    fences = db.execute("SELECT * FROM geofences").fetchall()
+
+    # Which geofences is the user currently inside?
+    nowInside = set()
+    for f in fences:
+        dist = haversineMeters(lat, lon, f["latitude"], f["longitude"])
+        if dist <= f["radiusMeters"]:
+            nowInside.add(f["id"])
+
+    # Compare with previous state
+    prevInside = theUserFenceState.get(dbUserId, set())
+
+    entered = nowInside - prevInside
+    exited = prevInside - nowInside
+
+    for fenceId in entered:
+        db.execute(
+            "INSERT INTO geofenceEvents (userId, geofenceId, eventType, timestamp) "
+            "VALUES (?, ?, 'enter', ?)",
+            (dbUserId, fenceId, ts)
+        )
+        debugLog("User " + str(dbUserId) + " entered geofence " + str(fenceId))
+
+    for fenceId in exited:
+        db.execute(
+            "INSERT INTO geofenceEvents (userId, geofenceId, eventType, timestamp) "
+            "VALUES (?, ?, 'exit', ?)",
+            (dbUserId, fenceId, ts)
+        )
+        debugLog("User " + str(dbUserId) + " exited geofence " + str(fenceId))
+
+    if entered or exited:
+        db.commit()
+
+    db.close()
+
+    theUserFenceState[dbUserId] = nowInside
+
+
 def handlePacket(data, addr, keyCache):
     """Process a single UDP packet.
 
@@ -176,6 +242,7 @@ def handlePacket(data, addr, keyCache):
 
     storeLocation(dbUserId, loc)
     storeWorkoutData(dbUserId, loc)
+    checkGeofences(dbUserId, loc)
 
 
 def runUdpListener(port):

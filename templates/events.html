@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Events - Family Tracks{% endblock %}
+
+{% block content %}
+<div class="events-container">
+    <h2>Geofence Events</h2>
+    <div id="eventsList" class="card">
+        <p>Loading...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function loadEvents() {
+        fetch('/api/geofence-events?limit=100')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var container = document.getElementById('eventsList');
+
+                if (data.length === 0) {
+                    container.innerHTML = '<p class="empty-msg">No geofence events yet. ' +
+                        'Events will appear here when family members enter or leave geofenced locations.</p>';
+                    return;
+                }
+
+                var html = '<div class="timeline">';
+                var lastDate = '';
+
+                data.forEach(function(evt) {
+                    var d = new Date(evt.timestamp);
+                    var dateStr = d.toLocaleDateString();
+                    var timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+                    if (dateStr !== lastDate) {
+                        html += '<div class="timeline-date">' + dateStr + '</div>';
+                        lastDate = dateStr;
+                    }
+
+                    var icon = evt.eventType === 'enter' ? '&#9654;' : '&#9664;';
+                    var cls = evt.eventType === 'enter' ? 'event-enter' : 'event-exit';
+
+                    html += '<div class="timeline-event ' + cls + '">';
+                    html += '<span class="event-time">' + timeStr + '</span>';
+                    html += '<span class="event-icon">' + icon + '</span>';
+                    html += '<span class="event-msg">' + evt.message + '</span>';
+                    html += '</div>';
+                });
+
+                html += '</div>';
+                container.innerHTML = html;
+            });
+    }
+
+    loadEvents();
+    setInterval(loadEvents, 30000);
+</script>
+{% endblock %}

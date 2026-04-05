@@ -71,6 +71,31 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/api/auth/token", methods=["POST"])
+def apiTokenLogin():
+    """Login via user_id + AES key (used by mobile app WebView).
+
+    The mobile app already has these from the QR code, so this
+    avoids making the user type a password in the app.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    userId = data.get("user_id", "")
+    key = data.get("key", "")
+
+    db = getDb()
+    row = db.execute("SELECT * FROM users WHERE userId = ?", (userId,)).fetchone()
+    db.close()
+
+    if row and row["aesKey"] == key:
+        login_user(User(row))
+        return jsonify({"status": "ok", "displayName": row["displayName"]})
+
+    return jsonify({"error": "invalid credentials"}), 401
+
+
 @app.route("/logout")
 @login_required
 def logout():
@@ -86,6 +111,12 @@ def logout():
 @login_required
 def dashboard():
     return render_template("dashboard.html")
+
+
+@app.route("/events")
+@login_required
+def events():
+    return render_template("events.html")
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +152,39 @@ def apiLatestLocations():
             "longitude": r["longitude"],
             "speed": r["speed"],
             "battery": r["battery"],
+            "timestamp": r["timestamp"]
+        })
+
+    return jsonify(result)
+
+
+@app.route("/api/geofence-events")
+@login_required
+def apiGeofenceEvents():
+    """Get recent geofence events for all users."""
+    limit = request.args.get("limit", 50, type=int)
+    db = getDb()
+    rows = db.execute("""
+        SELECT ge.id, ge.eventType, ge.timestamp,
+               u.displayName,
+               g.name as geofenceName
+        FROM geofenceEvents ge
+        JOIN users u ON u.id = ge.userId
+        JOIN geofences g ON g.id = ge.geofenceId
+        ORDER BY ge.timestamp DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    db.close()
+
+    result = []
+    for r in rows:
+        verb = "arrived at" if r["eventType"] == "enter" else "left"
+        result.append({
+            "id": r["id"],
+            "displayName": r["displayName"],
+            "geofenceName": r["geofenceName"],
+            "eventType": r["eventType"],
+            "message": r["displayName"] + " " + verb + " " + r["geofenceName"],
             "timestamp": r["timestamp"]
         })
 
@@ -488,6 +552,33 @@ def apiGeofences():
         result.append({
             "id": r["id"],
             "name": r["name"],
+            "latitude": r["latitude"],
+            "longitude": r["longitude"],
+            "radiusMeters": r["radiusMeters"]
+        })
+
+    return jsonify(result)
+
+
+@app.route("/api/geofences/all")
+@login_required
+def apiAllGeofences():
+    """Get all geofences for all users (used by mobile app sync)."""
+    db = getDb()
+    rows = db.execute("""
+        SELECT g.*, u.displayName as ownerName
+        FROM geofences g
+        JOIN users u ON u.id = g.userId
+        ORDER BY g.name
+    """).fetchall()
+    db.close()
+
+    result = []
+    for r in rows:
+        result.append({
+            "id": r["id"],
+            "name": r["name"],
+            "ownerName": r["ownerName"],
             "latitude": r["latitude"],
             "longitude": r["longitude"],
             "radiusMeters": r["radiusMeters"]

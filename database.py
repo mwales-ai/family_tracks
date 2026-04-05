@@ -90,6 +90,22 @@ def initDb():
             radiusMeters REAL NOT NULL DEFAULT 100,
             FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS geofenceEvents (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId      INTEGER NOT NULL,
+            geofenceId  INTEGER NOT NULL,
+            eventType   TEXT NOT NULL,
+            timestamp   TIMESTAMP NOT NULL,
+            FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (geofenceId) REFERENCES geofences(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_geofence_events_time
+            ON geofenceEvents(timestamp DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_geofence_events_user
+            ON geofenceEvents(userId, timestamp DESC);
     """)
 
     conn.commit()

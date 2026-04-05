@@ -2,8 +2,9 @@
 {% block title %}Map - Family Tracks{% endblock %}
 
 {% block content %}
-<div class="map-container">
+<div class="map-container {% if request.args.get('mobile') %}mobile-fullscreen{% endif %}">
     <div id="map"></div>
+    {% if not request.args.get('mobile') %}
     <div class="map-sidebar">
         <h3>Family Members</h3>
         <div id="memberList"></div>
@@ -20,6 +21,7 @@
             <button id="clearHistory" class="btn">Clear</button>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -51,14 +53,16 @@
         return d.toLocaleString();
     }
 
+    var isMobile = window.location.search.indexOf('mobile=1') !== -1;
+
     function refreshLocations() {
         fetch('/api/locations/latest')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var memberList = document.getElementById('memberList');
                 var historyUser = document.getElementById('historyUser');
-                memberList.innerHTML = '';
-                historyUser.innerHTML = '';
+                if (memberList) memberList.innerHTML = '';
+                if (historyUser) historyUser.innerHTML = '';
 
                 data.forEach(function(loc, i) {
                     var color = getColor(i);
@@ -84,23 +88,25 @@
                     if (loc.battery !== null) popupHtml += '<br>Battery: ' + Math.round(loc.battery) + '%';
                     markers[loc.userId].bindPopup(popupHtml);
 
-                    // Sidebar entry
-                    var div = document.createElement('div');
-                    div.className = 'member-entry';
-                    div.innerHTML = '<span class="member-dot" style="background:' + color + '"></span>' +
-                        '<span class="member-name">' + loc.displayName + '</span>' +
-                        '<span class="member-time">' + formatTime(loc.timestamp) + '</span>';
-                    div.onclick = function() {
-                        map.setView([loc.latitude, loc.longitude], 15);
-                        markers[loc.userId].openPopup();
-                    };
-                    memberList.appendChild(div);
+                    if (memberList) {
+                        var div = document.createElement('div');
+                        div.className = 'member-entry';
+                        div.innerHTML = '<span class="member-dot" style="background:' + color + '"></span>' +
+                            '<span class="member-name">' + loc.displayName + '</span>' +
+                            '<span class="member-time">' + formatTime(loc.timestamp) + '</span>';
+                        div.onclick = function() {
+                            map.setView([loc.latitude, loc.longitude], 15);
+                            markers[loc.userId].openPopup();
+                        };
+                        memberList.appendChild(div);
+                    }
 
-                    // History dropdown option
-                    var opt = document.createElement('option');
-                    opt.value = loc.userId;
-                    opt.text = loc.displayName;
-                    historyUser.appendChild(opt);
+                    if (historyUser) {
+                        var opt = document.createElement('option');
+                        opt.value = loc.userId;
+                        opt.text = loc.displayName;
+                        historyUser.appendChild(opt);
+                    }
                 });
 
                 if (data.length > 0 && !map._userPanned) {
@@ -111,55 +117,57 @@
             });
     }
 
-    // Set default date range to last 24 hours
-    var now = new Date();
-    var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    document.getElementById('historyEnd').value = now.toISOString().slice(0, 16);
-    document.getElementById('historyStart').value = yesterday.toISOString().slice(0, 16);
+    if (!isMobile) {
+        // Set default date range to last 24 hours
+        var now = new Date();
+        var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        document.getElementById('historyEnd').value = now.toISOString().slice(0, 16);
+        document.getElementById('historyStart').value = yesterday.toISOString().slice(0, 16);
 
-    document.getElementById('showHistory').onclick = function() {
-        var userId = document.getElementById('historyUser').value;
-        var start = document.getElementById('historyStart').value;
-        var end = document.getElementById('historyEnd').value;
+        document.getElementById('showHistory').onclick = function() {
+            var userId = document.getElementById('historyUser').value;
+            var start = document.getElementById('historyStart').value;
+            var end = document.getElementById('historyEnd').value;
 
-        if (!userId) return;
+            if (!userId) return;
 
-        var url = '/api/locations/history?userId=' + userId;
-        if (start) url += '&start=' + encodeURIComponent(start);
-        if (end) url += '&end=' + encodeURIComponent(end);
+            var url = '/api/locations/history?userId=' + userId;
+            if (start) url += '&start=' + encodeURIComponent(start);
+            if (end) url += '&end=' + encodeURIComponent(end);
 
-        fetch(url)
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (historyLine) {
-                    map.removeLayer(historyLine);
-                }
+            fetch(url)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (historyLine) {
+                        map.removeLayer(historyLine);
+                    }
 
-                if (data.length === 0) {
-                    alert('No location data found for this time range.');
-                    return;
-                }
+                    if (data.length === 0) {
+                        alert('No location data found for this time range.');
+                        return;
+                    }
 
-                var points = data.map(function(p) {
-                    return [p.latitude, p.longitude];
+                    var points = data.map(function(p) {
+                        return [p.latitude, p.longitude];
+                    });
+
+                    historyLine = L.polyline(points, {
+                        color: '#3498db',
+                        weight: 3,
+                        opacity: 0.8
+                    }).addTo(map);
+
+                    map.fitBounds(historyLine.getBounds().pad(0.1));
                 });
+        };
 
-                historyLine = L.polyline(points, {
-                    color: '#3498db',
-                    weight: 3,
-                    opacity: 0.8
-                }).addTo(map);
-
-                map.fitBounds(historyLine.getBounds().pad(0.1));
-            });
-    };
-
-    document.getElementById('clearHistory').onclick = function() {
-        if (historyLine) {
-            map.removeLayer(historyLine);
-            historyLine = null;
-        }
-    };
+        document.getElementById('clearHistory').onclick = function() {
+            if (historyLine) {
+                map.removeLayer(historyLine);
+                historyLine = null;
+            }
+        };
+    }
 
     // Load geofences
     var geofenceCircles = [];
