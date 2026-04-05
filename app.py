@@ -443,6 +443,49 @@ def adminQrCode(userId):
     return send_file(buf, mimetype="image/png")
 
 
+@app.route("/admin/backup")
+@login_required
+def adminBackup():
+    """Download a copy of the database file."""
+    if not current_user.isAdmin:
+        return redirect(url_for("dashboard"))
+
+    from database import DB_PATH
+    if not os.path.exists(DB_PATH):
+        flash("Database not found.", "error")
+        return redirect(url_for("admin"))
+
+    return send_file(DB_PATH, as_attachment=True, download_name="familytracks_backup.db")
+
+
+@app.route("/admin/restore", methods=["POST"])
+@login_required
+def adminRestore():
+    """Restore the database from an uploaded file."""
+    if not current_user.isAdmin:
+        return redirect(url_for("dashboard"))
+
+    if "dbfile" not in request.files:
+        flash("No file selected.", "error")
+        return redirect(url_for("admin"))
+
+    f = request.files["dbfile"]
+    if not f.filename:
+        flash("No file selected.", "error")
+        return redirect(url_for("admin"))
+
+    from database import DB_PATH
+    import shutil
+
+    # Save backup of current DB
+    if os.path.exists(DB_PATH):
+        shutil.copy2(DB_PATH, DB_PATH + ".bak")
+
+    f.save(DB_PATH)
+    flash("Database restored. Previous database saved as .bak file.", "success")
+    return redirect(url_for("admin"))
+
+
 # ---------------------------------------------------------------------------
 # Workouts
 # ---------------------------------------------------------------------------

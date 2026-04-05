@@ -154,17 +154,33 @@
                         return;
                     }
 
-                    var points = data.map(function(p) {
-                        return [p.latitude, p.longitude];
+                    // Color segments by speed: blue (slow) -> green -> yellow -> red (fast)
+                    var maxSpd = 0;
+                    data.forEach(function(p) {
+                        if (p.speed !== null && p.speed > maxSpd) maxSpd = p.speed;
                     });
+                    if (maxSpd < 1) maxSpd = 1;
 
-                    historyLine = L.polyline(points, {
-                        color: '#3498db',
-                        weight: 3,
-                        opacity: 0.8
-                    }).addTo(map);
+                    var segments = [];
+                    for (var j = 1; j < data.length; j++) {
+                        var spd = data[j].speed || 0;
+                        var ratio = Math.min(spd / maxSpd, 1);
+                        var segColor;
+                        if (ratio < 0.33) segColor = '#3498db';
+                        else if (ratio < 0.66) segColor = '#2ecc71';
+                        else segColor = '#e74c3c';
 
-                    map.fitBounds(historyLine.getBounds().pad(0.1));
+                        var seg = L.polyline([
+                            [data[j-1].latitude, data[j-1].longitude],
+                            [data[j].latitude, data[j].longitude]
+                        ], {color: segColor, weight: 4, opacity: 0.8});
+                        segments.push(seg);
+                    }
+
+                    historyLine = L.layerGroup(segments).addTo(map);
+
+                    var allPoints = data.map(function(p) { return [p.latitude, p.longitude]; });
+                    map.fitBounds(L.latLngBounds(allPoints).pad(0.1));
                 });
         };
 

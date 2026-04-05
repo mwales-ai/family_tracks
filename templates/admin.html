@@ -67,5 +67,17 @@
             </tbody>
         </table>
     </div>
+    <div class="card">
+        <h3>Database</h3>
+        <div class="form-row">
+            <a href="{{ url_for('adminBackup') }}" class="btn btn-primary">Download Backup</a>
+            <form method="POST" action="{{ url_for('adminRestore') }}" enctype="multipart/form-data"
+                  onsubmit="return confirm('This will replace the current database. Continue?');"
+                  style="display:flex;gap:8px;align-items:center;">
+                <input type="file" name="dbfile" accept=".db" required>
+                <button type="submit" class="btn btn-danger">Restore</button>
+            </form>
+        </div>
+    </div>
 </div>
 {% endblock %}
