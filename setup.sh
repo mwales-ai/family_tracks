@@ -29,17 +29,12 @@ if ! command -v docker &>/dev/null; then
     exit 1
 fi
 
-# Detect docker compose command (v2 plugin vs v1 standalone)
-if docker compose version &>/dev/null; then
-    DC="docker compose"
-elif command -v docker-compose &>/dev/null; then
-    DC="docker-compose"
-else
-    echo "Error: Docker Compose is not installed."
+# Require docker compose v2
+if ! docker compose version &>/dev/null; then
+    echo "Error: Docker Compose v2 is required."
+    echo "Install it with: sudo apt install docker-compose-plugin"
     exit 1
 fi
-
-echo "Using: $DC"
 
 # Get domain
 echo "Enter your domain name (e.g. tracks.example.com):"
@@ -116,7 +111,7 @@ rm nginx.conf.tmp
 mkdir -p certbot/conf certbot/www
 
 # Start the app and nginx (HTTP only)
-$DC up -d familytracks nginx
+docker compose up -d familytracks nginx
 
 echo "Waiting for nginx to start..."
 sleep 5
@@ -201,10 +196,10 @@ NGINXEOF
 sed -i "s/DOMAINHERE/${DOMAIN}/g" nginx.conf
 rm -f nginx.conf.final
 
-$DC restart nginx
+docker compose restart nginx
 
 # Start certbot renewal container
-$DC up -d certbot
+docker compose up -d certbot
 
 echo ""
 echo "============================================"
