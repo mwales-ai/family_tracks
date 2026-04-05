@@ -40,8 +40,8 @@
 * [X] Password minimum length (4 chars on add user)
 
 ## Map & UI Improvements
-* [ ] Auto-refresh map markers without full page reload (WebSocket or SSE)
-* [ ] User avatars (upload photo, display on map markers instead of initials)
+* [X] Auto-refresh map markers without full page reload (already polls every 30s via fetch)
+* [X] User avatars (upload photo, display on map markers instead of initials)
 * [ ] Speed and bearing displayed on track history (colored polylines)
 * [X] Export location history (GPX download from dashboard)
 * [ ] Backup / restore database from admin panel

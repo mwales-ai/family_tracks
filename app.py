@@ -579,6 +579,46 @@ def settings():
     return render_template("settings.html", geofences=geofences)
 
 
+@app.route("/settings/avatar", methods=["POST"])
+@login_required
+def uploadAvatar():
+    if "avatar" not in request.files:
+        flash("No file selected.", "error")
+        return redirect(url_for("settings"))
+
+    f = request.files["avatar"]
+    if not f.filename:
+        flash("No file selected.", "error")
+        return redirect(url_for("settings"))
+
+    ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
+        flash("Invalid image format. Use JPG, PNG, GIF, or WebP.", "error")
+        return redirect(url_for("settings"))
+
+    avatarDir = os.path.join("data", "avatars")
+    os.makedirs(avatarDir, exist_ok=True)
+
+    filename = str(current_user.id) + "." + ext
+    filepath = os.path.join(avatarDir, filename)
+    f.save(filepath)
+
+    db = getDb()
+    db.execute("UPDATE users SET avatarPath = ? WHERE id = ?", (filename, current_user.id))
+    db.commit()
+    db.close()
+
+    flash("Avatar updated.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/avatar/<filename>")
+def serveAvatar(filename):
+    """Serve avatar images from data/avatars/."""
+    avatarDir = os.path.join("data", "avatars")
+    return send_file(os.path.join(avatarDir, filename))
+
+
 @app.route("/settings/deletehistory", methods=["POST"])
 @login_required
 def deleteHistory():

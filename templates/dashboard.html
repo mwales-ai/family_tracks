@@ -72,12 +72,18 @@
                     if (markers[loc.userId]) {
                         markers[loc.userId].setLatLng([loc.latitude, loc.longitude]);
                     } else {
+                        var markerHtml;
+                        if (loc.avatarPath) {
+                            markerHtml = '<img src="/avatar/' + loc.avatarPath + '" class="marker-avatar">';
+                        } else {
+                            markerHtml = '<div style="background:' + color + '">' +
+                                  loc.displayName.charAt(0).toUpperCase() + '</div>';
+                        }
                         var icon = L.divIcon({
                             className: 'user-marker',
-                            html: '<div style="background:' + color + '">' +
-                                  loc.displayName.charAt(0).toUpperCase() + '</div>',
-                            iconSize: [32, 32],
-                            iconAnchor: [16, 16]
+                            html: markerHtml,
+                            iconSize: [36, 36],
+                            iconAnchor: [18, 18]
                         });
                         markers[loc.userId] = L.marker([loc.latitude, loc.longitude],
                             {icon: icon}).addTo(map);

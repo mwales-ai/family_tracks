@@ -249,8 +249,8 @@ body {
 
 /* User markers on map */
 .user-marker div {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     color: white;
     font-weight: bold;
@@ -258,6 +258,15 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.marker-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
     border: 2px solid white;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
@@ -336,6 +345,32 @@ body {
 
 .settings-form {
     max-width: 300px;
+}
+
+.avatar-section {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.avatar-preview {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.avatar-placeholder {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: #3498db;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: bold;
 }
 
 .geofence-map {
