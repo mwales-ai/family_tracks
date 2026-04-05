@@ -57,9 +57,9 @@
 * [ ] Show own location history in-app
 * [ ] Geofence configuration from app (add current location as geofence only)
 * [ ] Handle server unreachable (queue packets, retry)
-* [ ] Smart location reporting
-    * [ ] If sitting inside a geofence for 30+ mins, switch to coarse GPS / slower reporting
-    * [ ] When leaving geofence, go back to normal reporting
+* [X] Smart location reporting
+    * [X] If sitting inside a geofence for 30+ mins, switch to coarse GPS / slower reporting
+    * [X] When leaving geofence, go back to normal reporting
 * [ ] Workout mode (start/stop from app, high frequency reporting) (LOW PRIORITY)
 * [ ] App store listing / signed release build
 
