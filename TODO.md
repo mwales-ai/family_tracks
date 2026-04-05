@@ -45,7 +45,7 @@
 * [X] Speed-colored track history (blue=slow, green=medium, red=fast)
 * [X] Export location history (GPX download from dashboard)
 * [X] Backup / restore database from admin panel
-* [ ] Dark mode theme
+* [X] Dark mode theme (auto via prefers-color-scheme)
 
 ## Future: Data & Privacy
 * [ ] Auto-purge old location data (configurable retention period)

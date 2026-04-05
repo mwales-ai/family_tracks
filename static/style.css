@@ -537,3 +537,114 @@ body {
 .event-msg {
     flex: 1;
 }
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #1a1a2e;
+        color: #e0e0e0;
+    }
+
+    .navbar {
+        background: #16213e;
+    }
+
+    .card, .login-form, .map-sidebar, .workout-stats {
+        background: #222244;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="password"],
+    .history-controls select,
+    .history-controls input {
+        background: #2a2a4a;
+        color: #e0e0e0;
+        border-color: #444;
+    }
+
+    .btn {
+        background: #2a2a4a;
+        color: #e0e0e0;
+        border-color: #555;
+    }
+
+    .btn:hover {
+        background: #333366;
+    }
+
+    .btn-primary {
+        background: #2980b9;
+        border-color: #2471a3;
+    }
+
+    .btn-primary:hover {
+        background: #2471a3;
+    }
+
+    .btn-danger {
+        background: #c0392b;
+        border-color: #a93226;
+    }
+
+    .map-sidebar {
+        border-left-color: #333;
+    }
+
+    .member-entry:hover {
+        background: #2a2a4a;
+    }
+
+    .member-time, .event-time, .stat-label {
+        color: #888;
+    }
+
+    .user-table th {
+        color: #aaa;
+    }
+
+    .user-table td, .user-table th {
+        border-bottom-color: #333;
+    }
+
+    .flash-error {
+        background: #3a1a1a;
+        color: #e74c3c;
+        border-color: #5a2a2a;
+    }
+
+    .flash-success {
+        background: #1a3a1a;
+        color: #2ecc71;
+        border-color: #2a5a2a;
+    }
+
+    .timeline-date {
+        border-bottom-color: #333;
+    }
+
+    .stats-table td {
+        border-bottom-color: #333;
+    }
+
+    .card h3, h2, .login-container h1 {
+        color: #e0e0e0;
+    }
+
+    .workout-meta, .empty-msg {
+        color: #888;
+    }
+
+    a {
+        color: #5dade2;
+    }
+
+    .geofence-map {
+        border-color: #444;
+    }
+
+    .geofence-controls input[readonly] {
+        background: #2a2a4a;
+        color: #888;
+    }
+}
