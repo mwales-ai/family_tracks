@@ -146,22 +146,59 @@ docker run --rm \
     --no-eff-email \
     -d "${DOMAIN}"
 
-if [ $? -ne 0 ]; then
+# Check if cert was actually obtained
+if [ ! -f "certbot/conf/live/${DOMAIN}/fullchain.pem" ]; then
     echo ""
-    echo "Certificate request failed. Make sure:"
+    echo "Certificate not found. Make sure:"
     echo "  1. Your domain ${DOMAIN} points to this server's IP"
     echo "  2. Port 80 is open in your firewall"
     echo ""
-    echo "You can still use the server over HTTP on port 80."
+    echo "The server is running on HTTP (port 80) without TLS."
     echo "Re-run this script to try again."
+    rm -f nginx.conf.final
     exit 1
 fi
 
-# Step 3: Switch to HTTPS config and restart
+# Step 3: Write the final HTTPS nginx config
 echo ""
 echo "--- Step 3: Enabling HTTPS ---"
 
-cp nginx.conf.final nginx.conf
+cat > nginx.conf << 'NGINXEOF'
+server {
+    listen 80;
+    server_name DOMAINHERE;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name DOMAINHERE;
+
+    ssl_certificate     /etc/letsencrypt/live/DOMAINHERE/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/DOMAINHERE/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    location / {
+        proxy_pass http://familytracks:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINXEOF
+
+sed -i "s/DOMAINHERE/${DOMAIN}/g" nginx.conf
 rm -f nginx.conf.final
 
 $DC restart nginx
