@@ -19,6 +19,7 @@
             <input type="datetime-local" id="historyEnd">
             <button id="showHistory" class="btn btn-primary">Show Track</button>
             <button id="clearHistory" class="btn">Clear</button>
+            <button id="exportGpx" class="btn">Export GPX</button>
         </div>
     </div>
     {% endif %}
@@ -166,6 +167,17 @@
                 map.removeLayer(historyLine);
                 historyLine = null;
             }
+        };
+
+        document.getElementById('exportGpx').onclick = function() {
+            var userId = document.getElementById('historyUser').value;
+            var start = document.getElementById('historyStart').value;
+            var end = document.getElementById('historyEnd').value;
+            if (!userId) return;
+            var url = '/api/locations/export?userId=' + userId;
+            if (start) url += '&start=' + encodeURIComponent(start);
+            if (end) url += '&end=' + encodeURIComponent(end);
+            window.location.href = url;
         };
     }
 

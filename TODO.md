@@ -30,20 +30,20 @@
     * [X] Show recent geofence events from server API
     * [X] Pull-to-refresh
 
-## Future: Server Security & Polish
+## Server Security & Polish
 * [ ] HTTPS / TLS support (or reverse proxy instructions for nginx)
     * [ ] Easy way to make it compatible with LetsEncrypt certificates
 * [ ] Installer script (asks for port, admin password, sets up Docker)
-* [ ] Rate limiting on login endpoint to prevent brute force
-* [ ] Input validation / sanitization on all form inputs
-* [ ] Session timeout configuration
-* [ ] Password strength requirements
+* [X] Rate limiting on login endpoint to prevent brute force
+* [X] Input validation / sanitization on all form inputs
+* [X] Session timeout configuration (7-day persistent sessions)
+* [X] Password minimum length (4 chars on add user)
 
-## Future: Map & UI Improvements
+## Map & UI Improvements
 * [ ] Auto-refresh map markers without full page reload (WebSocket or SSE)
 * [ ] User avatars (upload photo, display on map markers instead of initials)
 * [ ] Speed and bearing displayed on track history (colored polylines)
-* [ ] Export location history (GPX or CSV download)
+* [X] Export location history (GPX download from dashboard)
 * [ ] Backup / restore database from admin panel
 * [ ] Dark mode theme
 

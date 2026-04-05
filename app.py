@@ -4,6 +4,8 @@ import base64
 import io
 import json
 import sqlite3
+import time
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
@@ -16,6 +18,25 @@ from udp_listener import startUdpThread
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
+app.permanent_session_lifetime = timedelta(days=7)
+
+# Rate limiting: track failed login attempts per IP
+theLoginAttempts = defaultdict(list)
+LOGIN_RATE_LIMIT = 5       # max attempts
+LOGIN_RATE_WINDOW = 300    # per 5 minutes
+
+
+def isRateLimited(ip):
+    """Check if an IP has exceeded the login rate limit."""
+    now = time.time()
+    # Prune old entries
+    theLoginAttempts[ip] = [t for t in theLoginAttempts[ip] if now - t < LOGIN_RATE_WINDOW]
+    return len(theLoginAttempts[ip]) >= LOGIN_RATE_LIMIT
+
+
+def recordFailedLogin(ip):
+    """Record a failed login attempt."""
+    theLoginAttempts[ip].append(time.time())
 
 loginManager = LoginManager()
 loginManager.init_app(app)
@@ -55,17 +76,24 @@ def index():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
+        ip = request.remote_addr
+
+        if isRateLimited(ip):
+            flash("Too many login attempts. Try again in a few minutes.", "error")
+            return render_template("login.html")
+
+        username = request.form.get("username", "").strip()[:64]
+        password = request.form.get("password", "")[:256]
 
         db = getDb()
         row = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         db.close()
 
         if row and check_password_hash(row["passwordHash"], password):
-            login_user(User(row))
+            login_user(User(row), remember=True)
             return redirect(url_for("dashboard"))
 
+        recordFailedLogin(ip)
         flash("Invalid username or password.", "error")
 
     return render_template("login.html")
@@ -240,6 +268,68 @@ def apiLocationHistory():
     return jsonify(result)
 
 
+@app.route("/api/locations/export")
+@login_required
+def apiExportGpx():
+    """Export location history as a GPX file."""
+    userId = request.args.get("userId", type=int)
+    startTime = request.args.get("start")
+    endTime = request.args.get("end")
+
+    if not userId:
+        return jsonify({"error": "userId required"}), 400
+
+    db = getDb()
+
+    user = db.execute("SELECT displayName FROM users WHERE id = ?", (userId,)).fetchone()
+    if not user:
+        db.close()
+        return jsonify({"error": "user not found"}), 404
+
+    if startTime and endTime:
+        rows = db.execute("""
+            SELECT latitude, longitude, altitude, speed, timestamp
+            FROM locations
+            WHERE userId = ? AND timestamp >= ? AND timestamp <= ?
+            ORDER BY timestamp ASC
+        """, (userId, startTime, endTime)).fetchall()
+    else:
+        rows = db.execute("""
+            SELECT latitude, longitude, altitude, speed, timestamp
+            FROM locations
+            WHERE userId = ? AND timestamp >= datetime('now', '-1 day')
+            ORDER BY timestamp ASC
+        """, (userId,)).fetchall()
+
+    db.close()
+
+    gpx = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    gpx += '<gpx version="1.1" creator="FamilyTracks">\n'
+    gpx += '  <trk>\n'
+    gpx += '    <name>' + user["displayName"] + '</name>\n'
+    gpx += '    <trkseg>\n'
+
+    for r in rows:
+        gpx += '      <trkpt lat="' + str(r["latitude"]) + '" lon="' + str(r["longitude"]) + '">\n'
+        if r["altitude"] is not None:
+            gpx += '        <ele>' + str(r["altitude"]) + '</ele>\n'
+        if r["timestamp"]:
+            gpx += '        <time>' + str(r["timestamp"]) + '</time>\n'
+        if r["speed"] is not None:
+            gpx += '        <speed>' + str(r["speed"]) + '</speed>\n'
+        gpx += '      </trkpt>\n'
+
+    gpx += '    </trkseg>\n'
+    gpx += '  </trk>\n'
+    gpx += '</gpx>\n'
+
+    buf = io.BytesIO(gpx.encode("utf-8"))
+    buf.seek(0)
+    filename = user["displayName"].replace(" ", "_") + "_track.gpx"
+    return send_file(buf, mimetype="application/gpx+xml",
+                     as_attachment=True, download_name=filename)
+
+
 # ---------------------------------------------------------------------------
 # Admin routes
 # ---------------------------------------------------------------------------
@@ -264,13 +354,17 @@ def adminAddUser():
     if not current_user.isAdmin:
         return redirect(url_for("dashboard"))
 
-    username = request.form.get("username", "").strip()
-    displayName = request.form.get("displayName", "").strip()
-    password = request.form.get("password", "")
+    username = request.form.get("username", "").strip()[:64]
+    displayName = request.form.get("displayName", "").strip()[:64]
+    password = request.form.get("password", "")[:256]
     isAdmin = 1 if request.form.get("isAdmin") else 0
 
     if not username or not password:
         flash("Username and password are required.", "error")
+        return redirect(url_for("admin"))
+
+    if len(password) < 4:
+        flash("Password must be at least 4 characters.", "error")
         return redirect(url_for("admin"))
 
     if not displayName:
@@ -499,7 +593,7 @@ def deleteHistory():
 @app.route("/settings/geofence/add", methods=["POST"])
 @login_required
 def addGeofence():
-    name = request.form.get("name", "").strip()
+    name = request.form.get("name", "").strip()[:64]
     lat = request.form.get("latitude", type=float)
     lon = request.form.get("longitude", type=float)
     radius = request.form.get("radius", 100, type=float)
@@ -507,6 +601,13 @@ def addGeofence():
     if not name or lat is None or lon is None:
         flash("Name, latitude, and longitude are required.", "error")
         return redirect(url_for("settings"))
+
+    if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+        flash("Invalid coordinates.", "error")
+        return redirect(url_for("settings"))
+
+    if radius < 10 or radius > 50000:
+        radius = max(10, min(50000, radius))
 
     db = getDb()
     db.execute(
