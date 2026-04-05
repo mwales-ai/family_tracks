@@ -29,10 +29,17 @@ if ! command -v docker &>/dev/null; then
     exit 1
 fi
 
-if ! docker compose version &>/dev/null && ! command -v docker-compose &>/dev/null; then
+# Detect docker compose command (v2 plugin vs v1 standalone)
+if docker compose version &>/dev/null; then
+    DC="docker compose"
+elif command -v docker-compose &>/dev/null; then
+    DC="docker-compose"
+else
     echo "Error: Docker Compose is not installed."
     exit 1
 fi
+
+echo "Using: $DC"
 
 # Get domain
 echo "Enter your domain name (e.g. tracks.example.com):"
@@ -109,7 +116,7 @@ rm nginx.conf.tmp
 mkdir -p certbot/conf certbot/www
 
 # Start the app and nginx (HTTP only)
-docker compose up -d familytracks nginx
+$DC up -d familytracks nginx
 
 echo "Waiting for nginx to start..."
 sleep 5
@@ -128,7 +135,7 @@ else
     EMAIL_ARG="--register-unsafely-without-email"
 fi
 
-docker compose run --rm certbot certonly \
+$DC run --rm certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     ${EMAIL_ARG} \
@@ -154,10 +161,10 @@ echo "--- Step 3: Enabling HTTPS ---"
 cp nginx.conf.final nginx.conf
 rm -f nginx.conf.final
 
-docker compose restart nginx
+$DC restart nginx
 
 # Start certbot renewal container
-docker compose up -d certbot
+$DC up -d certbot
 
 echo ""
 echo "============================================"

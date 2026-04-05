@@ -76,7 +76,7 @@ docker compose up -d
 Certbot runs as a container and auto-renews certificates. To manually renew:
 
 ```bash
-docker compose run --rm certbot renew
+docker compose run --rm certbot renew   # or docker-compose on older installs
 docker compose restart nginx
 ```
 
