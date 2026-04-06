@@ -183,6 +183,8 @@ server {
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
 
+    client_max_body_size 10M;
+
     location / {
         proxy_pass http://familytracks:5000;
         proxy_set_header Host $host;
