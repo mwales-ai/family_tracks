@@ -14,9 +14,12 @@
             <label for="historyUser">User:</label>
             <select id="historyUser"></select>
             <label for="historyStart">From:</label>
-            <input type="datetime-local" id="historyStart">
+            <input type="date" id="historyStart">
             <label for="historyEnd">To:</label>
-            <input type="datetime-local" id="historyEnd">
+            <input type="date" id="historyEnd">
+            <label class="precise-toggle">
+                <input type="checkbox" id="preciseTime"> Precise time
+            </label>
             <button id="showHistory" class="btn btn-primary">Show Track</button>
             <button id="clearHistory" class="btn">Clear</button>
             <button id="exportGpx" class="btn">Export GPX</button>
@@ -48,13 +51,63 @@
         return colors[index % colors.length];
     }
 
+    function formatSpeed(mps) {
+        if (mps === null || mps === undefined) return null;
+        if (window.USER_UNITS === 'imperial') {
+            return (mps * 2.23694).toFixed(1) + ' mph';
+        }
+        return (mps * 3.6).toFixed(1) + ' km/h';
+    }
+
     function formatTime(timestamp) {
         if (!timestamp) return "Unknown";
         var d = new Date(timestamp);
-        return d.toLocaleString();
+        var opts = {};
+        if (window.USER_TIMEZONE) opts.timeZone = window.USER_TIMEZONE;
+        return d.toLocaleString(undefined, opts);
     }
 
     var isMobile = window.location.search.indexOf('mobile=1') !== -1;
+
+    // Spread out markers that are very close together so avatars don't overlap.
+    // Returns adjusted [{lat, lon, origIdx}] array.
+    function spreadOverlapping(data) {
+        var CLOSE_METERS = 50;  // treat as "same place" if within 50m
+        var OFFSET_DEG = 0.0003; // ~33m offset for spread
+
+        var result = [];
+        for (var i = 0; i < data.length; i++) {
+            result.push({lat: data[i].latitude, lon: data[i].longitude});
+        }
+
+        // Group indices by proximity
+        var visited = {};
+        for (var i = 0; i < data.length; i++) {
+            if (visited[i]) continue;
+            var group = [i];
+            for (var j = i + 1; j < data.length; j++) {
+                if (visited[j]) continue;
+                var dLat = data[i].latitude - data[j].latitude;
+                var dLon = data[i].longitude - data[j].longitude;
+                // Quick approximate distance check (~111km per degree)
+                var approxM = Math.sqrt(dLat * dLat + dLon * dLon) * 111000;
+                if (approxM < CLOSE_METERS) {
+                    group.push(j);
+                    visited[j] = true;
+                }
+            }
+            if (group.length > 1) {
+                var cx = data[i].latitude;
+                var cy = data[i].longitude;
+                for (var k = 0; k < group.length; k++) {
+                    var angle = (2 * Math.PI * k) / group.length;
+                    result[group[k]].lat = cx + OFFSET_DEG * Math.cos(angle);
+                    result[group[k]].lon = cy + OFFSET_DEG * Math.sin(angle);
+                }
+            }
+        }
+        return result;
+    }
 
     function refreshLocations() {
         fetch('/api/locations/latest')
@@ -65,12 +118,16 @@
                 if (memberList) memberList.innerHTML = '';
                 if (historyUser) historyUser.innerHTML = '';
 
+                var adjusted = spreadOverlapping(data);
+
                 data.forEach(function(loc, i) {
                     var color = getColor(i);
+                    var displayLat = adjusted[i].lat;
+                    var displayLon = adjusted[i].lon;
 
                     // Update or create marker
                     if (markers[loc.userId]) {
-                        markers[loc.userId].setLatLng([loc.latitude, loc.longitude]);
+                        markers[loc.userId].setLatLng([displayLat, displayLon]);
                     } else {
                         var markerHtml;
                         if (loc.avatarPath) {
@@ -85,13 +142,13 @@
                             iconSize: [36, 36],
                             iconAnchor: [18, 18]
                         });
-                        markers[loc.userId] = L.marker([loc.latitude, loc.longitude],
+                        markers[loc.userId] = L.marker([displayLat, displayLon],
                             {icon: icon}).addTo(map);
                     }
 
                     var popupHtml = '<b>' + loc.displayName + '</b><br>' +
                         'Updated: ' + formatTime(loc.timestamp);
-                    if (loc.speed !== null) popupHtml += '<br>Speed: ' + loc.speed.toFixed(1) + ' m/s';
+                    if (loc.speed !== null) popupHtml += '<br>Speed: ' + formatSpeed(loc.speed);
                     if (loc.battery !== null) popupHtml += '<br>Battery: ' + Math.round(loc.battery) + '%';
                     markers[loc.userId].bindPopup(popupHtml);
 
@@ -128,13 +185,39 @@
         // Set default date range to last 24 hours
         var now = new Date();
         var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        document.getElementById('historyEnd').value = now.toISOString().slice(0, 16);
-        document.getElementById('historyStart').value = yesterday.toISOString().slice(0, 16);
+        document.getElementById('historyEnd').value = now.toISOString().slice(0, 10);
+        document.getElementById('historyStart').value = yesterday.toISOString().slice(0, 10);
+
+        // Toggle between date-only and precise datetime inputs
+        document.getElementById('preciseTime').onchange = function() {
+            var startEl = document.getElementById('historyStart');
+            var endEl = document.getElementById('historyEnd');
+            var startVal = startEl.value;
+            var endVal = endEl.value;
+
+            if (this.checked) {
+                startEl.type = 'datetime-local';
+                endEl.type = 'datetime-local';
+                // Preserve date, add time
+                if (startVal && startVal.length === 10) startEl.value = startVal + 'T00:00';
+                if (endVal && endVal.length === 10) endEl.value = endVal + 'T23:59';
+            } else {
+                startEl.type = 'date';
+                endEl.type = 'date';
+                // Strip time portion
+                if (startVal) startEl.value = startVal.slice(0, 10);
+                if (endVal) endEl.value = endVal.slice(0, 10);
+            }
+        };
 
         document.getElementById('showHistory').onclick = function() {
             var userId = document.getElementById('historyUser').value;
             var start = document.getElementById('historyStart').value;
             var end = document.getElementById('historyEnd').value;
+
+            // For date-only inputs, use start of day and end of day
+            if (start && start.length === 10) start = start + 'T00:00';
+            if (end && end.length === 10) end = end + 'T23:59';
 
             if (!userId) return;
 
@@ -179,6 +262,11 @@
 
                     historyLine = L.layerGroup(segments).addTo(map);
 
+                    if (!legendVisible) {
+                        legendControl.addTo(map);
+                        legendVisible = true;
+                    }
+
                     var allPoints = data.map(function(p) { return [p.latitude, p.longitude]; });
                     map.fitBounds(L.latLngBounds(allPoints).pad(0.1));
                 });
@@ -188,6 +276,10 @@
             if (historyLine) {
                 map.removeLayer(historyLine);
                 historyLine = null;
+            }
+            if (legendVisible) {
+                legendControl.remove();
+                legendVisible = false;
             }
         };
 
@@ -221,6 +313,19 @@
                 geofenceCircles.push(circle);
             });
         });
+
+    // Speed legend (shown when track history is visible)
+    var legendControl = L.control({position: 'bottomright'});
+    legendControl.onAdd = function() {
+        var div = L.DomUtil.create('div', 'speed-legend');
+        div.innerHTML =
+            '<b>Track Speed</b><br>' +
+            '<span style="background:#3498db"></span> Slow<br>' +
+            '<span style="background:#2ecc71"></span> Medium<br>' +
+            '<span style="background:#e74c3c"></span> Fast';
+        return div;
+    };
+    var legendVisible = false;
 
     // Refresh locations every 30 seconds
     refreshLocations();

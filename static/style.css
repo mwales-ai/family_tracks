@@ -647,4 +647,43 @@ body {
         background: #2a2a4a;
         color: #888;
     }
+
+    .speed-legend {
+        background: rgba(30, 30, 50, 0.9);
+        color: #ddd;
+    }
+}
+
+/* Precise time toggle */
+.precise-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    margin: 4px 0;
+}
+
+/* Speed legend on map */
+.speed-legend {
+    background: rgba(255, 255, 255, 0.92);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.8;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.speed-legend b {
+    display: block;
+    margin-bottom: 2px;
+}
+
+.speed-legend span {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    vertical-align: middle;
+    border-radius: 2px;
 }

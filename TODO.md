@@ -1,5 +1,29 @@
 # Incomplete Tasks
 
+* [X] Settings screen has the events screen visible as well
+* [X] Debug screen
+    * [X] Give it an icon like a lady bug or something, it has the same icon as settings
+    * [X] Make the debug tab a toggle setting in the settings page (code is in preferences.xml + MainActivity, needs APK rebuild)
+* [X] Limit events to 48 hours on the phone
+* [X] On the status page of the android app, the top picture used to be my avatar, now it's a placeholder image
+* [X] Make a readme for the android app
+* [X] I think events may get repeated x times where x is the number of people in the group
+* [X] If multiple users have the save location, can we move them a little apart so their avatars don't overlap
+* [X] Add a toggle on the webpage to change between Freedom (Imperial) and metric units for speed and distance
+* [X] Document the steps for updating the server and keeping database intact
+
+* [ ] Can we create a way to have the APK a download link on the webpage itself so I don't have to adb install it on other devices
+    * [ ] Set up GitHub Actions workflow for building signed APK
+    * [ ] Create a GitHub release with the APK attached
+    * [ ] Add a download link on the server web page (admin panel) pointing to the GitHub release
+    * [ ] Alternatively: add a /download/apk route that serves a manually uploaded APK from the server
+
+* [X] The track on the map has all these colors, but no explanation of what the colors mean.
+* [ ] Write some documentation about the messages / APIs used by the mobile and web service to communicate (like an ICD that we can have an independent security researcher verify)
+* [ ] Admins need a way to force a client to re-key if they think they got compromised
+* [X] The website should have a preferred timezone setting
+* [X] The time selection on the map should just have dates, unless the user opens a more detailed / precise time selection mode
+
 ## MVP Phase 1: Reliable Location Tracking
 * [X] Server receives and stores encrypted UDP location packets
 * [X] Web dashboard shows family member locations on map

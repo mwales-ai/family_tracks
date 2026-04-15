@@ -99,6 +99,73 @@ Internet
   |--- UDP 5555 --> UDP listener (AES-256-GCM encrypted location packets)
 ```
 
+# Updating the Server
+
+All persistent data (database, avatars, keys) is stored in the `./data/` directory
+on the host, which is bind-mounted into the container. The container itself is
+stateless, so replacing it does not lose any data.
+
+## Standard Update
+
+```bash
+cd family_tracks
+
+# 1. Back up the database (recommended before any update)
+cp data/familytracks.db data/familytracks.db.backup-$(date +%Y%m%d)
+
+# 2. Pull the latest code
+git stash             # save any local changes (e.g. nginx.conf edits)
+git pull
+git stash pop         # restore local changes
+
+# 3. Rebuild and restart the container
+docker compose build
+docker compose up -d
+```
+
+The `docker compose up -d` command stops the old container and starts a new one.
+The `./data/` volume mount stays in place — your database, user accounts, AES keys,
+and avatar images are untouched.
+
+## What Lives Where
+
+| Data | Location | Survives container rebuild? |
+|------|----------|----------------------------|
+| Database (users, locations, keys) | `./data/familytracks.db` | Yes |
+| Avatar images | `./data/avatars/` | Yes |
+| TLS certificates | `./certbot/conf/` | Yes |
+| nginx config | `./nginx.conf` | Yes (host file, not in image) |
+| SECRET_KEY | `.env` file | Yes |
+
+## Things to Avoid
+
+- **`docker compose down -v`** — the `-v` flag removes named volumes. Currently
+  data is bind-mounted so this is safe, but avoid it as a habit.
+- **Deleting `./data/`** — this is everything. There is no other copy.
+- **Changing SECRET_KEY** — invalidates all active sessions (users must re-login,
+  but no data is lost).
+
+## Downtime
+
+The rebuild takes a few seconds. During this window:
+- The web dashboard is briefly unavailable
+- UDP location packets from phones are dropped (the next packet arrives on the
+  normal reporting interval, so no data gap beyond one interval)
+- The Android app does not queue packets, so 1-2 location points may be missed
+
+## If nginx.conf Has Local Changes
+
+The `setup.sh` script customizes `nginx.conf` with your domain name and cert paths.
+These changes are local to your server and not tracked in git. Use `git stash` /
+`git stash pop` around `git pull` to preserve them, or keep a separate copy:
+
+```bash
+cp nginx.conf nginx.conf.local
+git pull
+cp nginx.conf.local nginx.conf
+docker compose restart nginx
+```
+
 # Adding Users
 
 1. Log into the web admin panel

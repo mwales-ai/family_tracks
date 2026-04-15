@@ -50,6 +50,8 @@ class User(UserMixin):
         self.displayName = row["displayName"]
         self.isAdmin = bool(row["isAdmin"])
         self.avatarPath = row["avatarPath"]
+        self.timezone = row["timezone"] or "UTC"
+        self.units = row["units"] or "metric"
 
 
 @loginManager.user_loader
@@ -191,17 +193,32 @@ def apiLatestLocations():
 def apiGeofenceEvents():
     """Get recent geofence events for all users."""
     limit = request.args.get("limit", 50, type=int)
+    since = request.args.get("since", None)
     db = getDb()
-    rows = db.execute("""
-        SELECT ge.id, ge.eventType, ge.timestamp,
-               u.displayName,
-               g.name as geofenceName
-        FROM geofenceEvents ge
-        JOIN users u ON u.id = ge.userId
-        JOIN geofences g ON g.id = ge.geofenceId
-        ORDER BY ge.timestamp DESC
-        LIMIT ?
-    """, (limit,)).fetchall()
+
+    if since:
+        rows = db.execute("""
+            SELECT ge.id, ge.eventType, ge.timestamp,
+                   u.displayName,
+                   g.name as geofenceName
+            FROM geofenceEvents ge
+            JOIN users u ON u.id = ge.userId
+            JOIN geofences g ON g.id = ge.geofenceId
+            WHERE ge.timestamp >= ?
+            ORDER BY ge.timestamp DESC
+            LIMIT ?
+        """, (since, limit)).fetchall()
+    else:
+        rows = db.execute("""
+            SELECT ge.id, ge.eventType, ge.timestamp,
+                   u.displayName,
+                   g.name as geofenceName
+            FROM geofenceEvents ge
+            JOIN users u ON u.id = ge.userId
+            JOIN geofences g ON g.id = ge.geofenceId
+            ORDER BY ge.timestamp DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
     db.close()
 
     result = []
@@ -628,6 +645,32 @@ def settings():
     return render_template("settings.html", geofences=geofences)
 
 
+@app.route("/settings/timezone", methods=["POST"])
+@login_required
+def updateTimezone():
+    tz = request.form.get("timezone", "UTC").strip()
+    db = getDb()
+    db.execute("UPDATE users SET timezone = ? WHERE id = ?", (tz, current_user.id))
+    db.commit()
+    db.close()
+    flash("Timezone updated.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/units", methods=["POST"])
+@login_required
+def updateUnits():
+    units = request.form.get("units", "metric").strip()
+    if units not in ("metric", "imperial"):
+        units = "metric"
+    db = getDb()
+    db.execute("UPDATE users SET units = ? WHERE id = ?", (units, current_user.id))
+    db.commit()
+    db.close()
+    flash("Units updated.", "success")
+    return redirect(url_for("settings"))
+
+
 @app.route("/settings/avatar", methods=["POST"])
 @login_required
 def uploadAvatar():
@@ -666,6 +709,19 @@ def serveAvatar(filename):
     """Serve avatar images from data/avatars/."""
     avatarDir = os.path.join("data", "avatars")
     return send_file(os.path.join(avatarDir, filename))
+
+
+@app.route("/api/user/avatar")
+@login_required
+def apiUserAvatar():
+    """Serve the current user's avatar image, or 404 if none set."""
+    if not current_user.avatarPath:
+        return "", 404
+    avatarDir = os.path.join("data", "avatars")
+    filepath = os.path.join(avatarDir, current_user.avatarPath)
+    if not os.path.exists(filepath):
+        return "", 404
+    return send_file(filepath)
 
 
 @app.route("/settings/deletehistory", methods=["POST"])

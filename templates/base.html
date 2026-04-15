@@ -39,6 +39,12 @@
         {% block content %}{% endblock %}
     </main>
 
+    {% if current_user.is_authenticated %}
+    <script>
+        window.USER_TIMEZONE = '{{ current_user.timezone }}';
+        window.USER_UNITS = '{{ current_user.units }}';
+    </script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 </body>
 </html>

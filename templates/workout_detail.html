@@ -112,12 +112,23 @@
             // Build stats HTML
             var html = '<table class="stats-table">';
             html += statRow('Duration', durationMin + ' min');
-            html += statRow('Distance', (totalDist / 1000).toFixed(2) + ' km');
+            if (window.USER_UNITS === 'imperial') {
+                html += statRow('Distance', (totalDist / 1609.34).toFixed(2) + ' mi');
+            } else {
+                html += statRow('Distance', (totalDist / 1000).toFixed(2) + ' km');
+            }
             html += statRow('Data Points', data.length);
 
             if (maxSpeed > 0) {
-                html += statRow('Avg Speed', (totalSpeed / data.length).toFixed(1) + ' m/s');
-                html += statRow('Max Speed', maxSpeed.toFixed(1) + ' m/s');
+                var imperial = (window.USER_UNITS === 'imperial');
+                var avgSpd = totalSpeed / data.length;
+                if (imperial) {
+                    html += statRow('Avg Speed', (avgSpd * 2.23694).toFixed(1) + ' mph');
+                    html += statRow('Max Speed', (maxSpeed * 2.23694).toFixed(1) + ' mph');
+                } else {
+                    html += statRow('Avg Speed', (avgSpd * 3.6).toFixed(1) + ' km/h');
+                    html += statRow('Max Speed', (maxSpeed * 3.6).toFixed(1) + ' km/h');
+                }
             }
 
             if (hrCount > 0) {
@@ -126,7 +137,12 @@
             }
 
             if (minAlt !== null) {
-                html += statRow('Elevation', minAlt.toFixed(0) + ' - ' + maxAlt.toFixed(0) + ' m');
+                var imperial = (window.USER_UNITS === 'imperial');
+                if (imperial) {
+                    html += statRow('Elevation', (minAlt * 3.28084).toFixed(0) + ' - ' + (maxAlt * 3.28084).toFixed(0) + ' ft');
+                } else {
+                    html += statRow('Elevation', minAlt.toFixed(0) + ' - ' + maxAlt.toFixed(0) + ' m');
+                }
                 html += statRow('Elevation Gain', (maxAlt - minAlt).toFixed(0) + ' m');
             }
 

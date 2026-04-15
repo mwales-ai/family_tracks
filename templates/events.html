@@ -29,8 +29,12 @@
 
                 data.forEach(function(evt) {
                     var d = new Date(evt.timestamp);
-                    var dateStr = d.toLocaleDateString();
-                    var timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                    var tzOpts = {};
+                    if (window.USER_TIMEZONE) tzOpts.timeZone = window.USER_TIMEZONE;
+                    var dateStr = d.toLocaleDateString(undefined, tzOpts);
+                    var timeOpts = {hour: '2-digit', minute: '2-digit'};
+                    if (window.USER_TIMEZONE) timeOpts.timeZone = window.USER_TIMEZONE;
+                    var timeStr = d.toLocaleTimeString([], timeOpts);
 
                     if (dateStr !== lastDate) {
                         html += '<div class="timeline-date">' + dateStr + '</div>';

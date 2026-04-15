@@ -27,6 +27,8 @@ def initDb():
             passwordHash TEXT NOT NULL,
             isAdmin     INTEGER NOT NULL DEFAULT 0,
             avatarPath  TEXT,
+            timezone    TEXT DEFAULT 'UTC',
+            units       TEXT DEFAULT 'metric',
             aesKey      TEXT,
             userId      TEXT UNIQUE,
             createdAt   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -109,4 +111,14 @@ def initDb():
     """)
 
     conn.commit()
+
+    # Migrations for existing databases
+    existingCols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "timezone" not in existingCols:
+        conn.execute("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'UTC'")
+        conn.commit()
+    if "units" not in existingCols:
+        conn.execute("ALTER TABLE users ADD COLUMN units TEXT DEFAULT 'metric'")
+        conn.commit()
+
     conn.close()

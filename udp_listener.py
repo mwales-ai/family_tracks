@@ -138,12 +138,23 @@ def checkGeofences(dbUserId, loc):
     db = getDb()
 
     # Get ALL geofences (not just this user's — parents want to know
-    # when kids arrive at the kid's own geofences)
+    # when kids arrive at the kid's own geofences).
+    # Deduplicate by name so overlapping fences created by different users
+    # only trigger one event (e.g. multiple users each add "Home" at
+    # the same address).
     fences = db.execute("SELECT * FROM geofences").fetchall()
+
+    # Group by name — keep only the first fence per unique name
+    seenNames = {}
+    uniqueFences = []
+    for f in fences:
+        if f["name"] not in seenNames:
+            seenNames[f["name"]] = True
+            uniqueFences.append(f)
 
     # Which geofences is the user currently inside?
     nowInside = set()
-    for f in fences:
+    for f in uniqueFences:
         dist = haversineMeters(lat, lon, f["latitude"], f["longitude"])
         if dist <= f["radiusMeters"]:
             nowInside.add(f["id"])
