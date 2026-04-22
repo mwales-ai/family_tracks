@@ -79,5 +79,26 @@
             </form>
         </div>
     </div>
+
+    <div class="card">
+        <h3>Android App</h3>
+        {% if apk %}
+        <p>Current APK: {{ apk.sizeMB }} MB &mdash; uploaded {{ apk.uploaded }}</p>
+        <div class="form-row">
+            <a href="{{ url_for('downloadApk') }}" class="btn btn-primary">Download APK</a>
+        </div>
+        {% else %}
+        <p>No APK uploaded yet.</p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('adminUploadApk') }}" enctype="multipart/form-data"
+              style="display:flex;gap:8px;align-items:center;margin-top:12px;">
+            <input type="file" name="apkfile" accept=".apk" required>
+            <button type="submit" class="btn btn-primary">Upload New APK</button>
+        </form>
+        <p style="margin-top:8px;font-size:0.9em;opacity:0.75;">
+            Family members can download the APK directly from
+            <code>/download/apk</code> without logging in.
+        </p>
+    </div>
 </div>
 {% endblock %}

@@ -362,7 +362,15 @@ def admin():
     users = db.execute("SELECT * FROM users ORDER BY username").fetchall()
     db.close()
 
-    return render_template("admin.html", users=users)
+    apkPath, apkSize, apkMtime = apkInfo()
+    apk = None
+    if apkPath:
+        apk = {
+            "sizeMB": "{:.1f}".format(apkSize / (1024.0 * 1024.0)),
+            "uploaded": datetime.fromtimestamp(apkMtime).strftime("%Y-%m-%d %H:%M")
+        }
+
+    return render_template("admin.html", users=users, apk=apk)
 
 
 @app.route("/admin/adduser", methods=["POST"])
@@ -506,6 +514,56 @@ def adminRestore():
 
     f.save(DB_PATH)
     flash("Database restored. Previous database saved as .bak file.", "success")
+    return redirect(url_for("admin"))
+
+
+# ---------------------------------------------------------------------------
+# APK distribution
+# ---------------------------------------------------------------------------
+
+APK_DIR = os.path.join("data", "apks")
+APK_FILENAME = "family-tracks.apk"
+
+
+def apkInfo():
+    """Return (path, size_bytes, mtime) for the current APK, or (None, 0, 0)."""
+    path = os.path.join(APK_DIR, APK_FILENAME)
+    if not os.path.exists(path):
+        return (None, 0, 0)
+    st = os.stat(path)
+    return (path, st.st_size, st.st_mtime)
+
+
+@app.route("/download/apk")
+def downloadApk():
+    """Serve the Android APK. Public — phones can hit it without a session
+    so that new family members can install from a QR-code link."""
+    path, size, _ = apkInfo()
+    if path is None:
+        return "APK not available. Ask an admin to upload one.", 404
+    return send_file(path, as_attachment=True, download_name=APK_FILENAME,
+                     mimetype="application/vnd.android.package-archive")
+
+
+@app.route("/admin/uploadapk", methods=["POST"])
+@login_required
+def adminUploadApk():
+    """Admin-only APK upload."""
+    if not current_user.isAdmin:
+        return redirect(url_for("dashboard"))
+
+    if "apkfile" not in request.files:
+        flash("No file selected.", "error")
+        return redirect(url_for("admin"))
+
+    f = request.files["apkfile"]
+    if not f.filename or not f.filename.lower().endswith(".apk"):
+        flash("Please upload a .apk file.", "error")
+        return redirect(url_for("admin"))
+
+    os.makedirs(APK_DIR, exist_ok=True)
+    f.save(os.path.join(APK_DIR, APK_FILENAME))
+    flash("APK uploaded.", "success")
     return redirect(url_for("admin"))
 
 

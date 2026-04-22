@@ -26,11 +26,11 @@
 * [X] Add a toggle on the webpage to change between Freedom (Imperial) and metric units for speed and distance
 * [X] Document the steps for updating the server and keeping database intact
 
-* [ ] Can we create a way to have the APK a download link on the webpage itself so I don't have to adb install it on other devices
-    * [ ] Set up GitHub Actions workflow for building signed APK
-    * [ ] Create a GitHub release with the APK attached
-    * [ ] Add a download link on the server web page (admin panel) pointing to the GitHub release
-    * [ ] Alternatively: add a /download/apk route that serves a manually uploaded APK from the server
+* [X] Can we create a way to have the APK a download link on the webpage itself so I don't have to adb install it on other devices
+    * [ ] Set up GitHub Actions workflow for building signed APK (deferred — debug APK is fine for family use)
+    * [ ] Create a GitHub release with the APK attached (deferred)
+    * [ ] Add a download link on the server web page (admin panel) pointing to the GitHub release (deferred)
+    * [X] Alternatively: add a /download/apk route that serves a manually uploaded APK from the server
 
 * [X] The track on the map has all these colors, but no explanation of what the colors mean.
 * [X] Write some documentation about the messages / APIs used by the mobile and web service to communicate (like an ICD that we can have an independent security researcher verify) — see docs/protocol.md
