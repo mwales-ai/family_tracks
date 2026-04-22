@@ -14,7 +14,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import qrcode
 
 from database import initDb, getDb
-from udp_listener import startUdpThread
+from udp_listener import startUdpThread, invalidateUserInCache
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -413,6 +413,43 @@ def adminAddUser():
     finally:
         db.close()
 
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/rekey/<int:userId>", methods=["POST"])
+@login_required
+def adminRekey(userId):
+    """Rotate a user's AES key and UUID. Old QR code stops working
+    immediately; admin must show the user the new QR code to re-enroll."""
+    if not current_user.isAdmin:
+        return redirect(url_for("dashboard"))
+
+    db = getDb()
+    row = db.execute("SELECT username FROM users WHERE id = ?", (userId,)).fetchone()
+    if not row:
+        db.close()
+        flash("User not found.", "error")
+        return redirect(url_for("admin"))
+
+    newKey = base64.b64encode(os.urandom(32)).decode("ascii")
+    newUuid = str(uuid.uuid4())
+    db.execute(
+        "UPDATE users SET aesKey = ?, userId = ? WHERE id = ?",
+        (newKey, newUuid, userId)
+    )
+    db.commit()
+    username = row["username"]
+    db.close()
+
+    # Drop the old credentials from the UDP listener's in-memory cache
+    # so packets under the old key stop being accepted immediately.
+    invalidateUserInCache(userId)
+
+    flash(
+        f"Re-keyed '{username}'. The old QR code is no longer valid — "
+        "show this user the new QR code to re-enroll.",
+        "success"
+    )
     return redirect(url_for("admin"))
 
 

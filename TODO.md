@@ -34,7 +34,7 @@
 
 * [X] The track on the map has all these colors, but no explanation of what the colors mean.
 * [X] Write some documentation about the messages / APIs used by the mobile and web service to communicate (like an ICD that we can have an independent security researcher verify) — see docs/protocol.md
-* [ ] Admins need a way to force a client to re-key if they think they got compromised
+* [X] Admins need a way to force a client to re-key if they think they got compromised
 * [X] The website should have a preferred timezone setting
 * [X] The time selection on the map should just have dates, unless the user opens a more detailed / precise time selection mode
 

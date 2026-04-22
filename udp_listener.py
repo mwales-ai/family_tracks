@@ -13,6 +13,10 @@ UDP_LISTENER_DEBUG = False
 # Track each user's last known geofence state: {dbUserId: set(geofenceId)}
 theUserFenceState = {}
 
+# Module-level key cache shared with the admin re-key path so we can drop
+# stale credentials without restarting the listener.
+theKeyCache = {}
+
 
 def debugLog(msg):
     if UDP_LISTENER_DEBUG:
@@ -56,14 +60,26 @@ def lookupUserByUuid(userUuid):
 
 
 def buildKeyCache():
-    """Build a dict mapping userId UUID -> (db id, aesKey) for fast lookup."""
+    """Populate the module-level key cache from the users table."""
     db = getDb()
     rows = db.execute("SELECT id, userId, aesKey FROM users").fetchall()
     db.close()
-    cache = {}
+    theKeyCache.clear()
     for r in rows:
-        cache[r["userId"]] = (r["id"], r["aesKey"])
-    return cache
+        theKeyCache[r["userId"]] = (r["id"], r["aesKey"])
+    return theKeyCache
+
+
+def invalidateUserInCache(dbUserId):
+    """Remove any cached entry whose DB user id matches. Called after
+    admin re-key so an attacker with the old key+UUID can't keep
+    sending valid packets."""
+    stale = [uuid for uuid, (uid, _) in theKeyCache.items() if uid == dbUserId]
+    for uuid in stale:
+        del theKeyCache[uuid]
+    # Also forget that user's geofence state — old in-memory state
+    # is tied to prior credentials.
+    theUserFenceState.pop(dbUserId, None)
 
 
 def storeLocation(dbUserId, loc):
@@ -262,12 +278,12 @@ def runUdpListener(port):
     sock.bind(("0.0.0.0", port))
     print("UDP listener started on port " + str(port))
 
-    keyCache = buildKeyCache()
+    buildKeyCache()
 
     while True:
         data, addr = sock.recvfrom(4096)
         try:
-            handlePacket(data, addr, keyCache)
+            handlePacket(data, addr, theKeyCache)
         except Exception as e:
             debugLog("Error handling packet: " + str(e))
 

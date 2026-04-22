@@ -55,6 +55,10 @@
                     <td class="actions">
                         <a href="{{ url_for('adminQrCode', userId=user.id) }}"
                            target="_blank" class="btn btn-small">QR Code</a>
+                        <form method="POST" action="{{ url_for('adminRekey', userId=user.id) }}"
+                              onsubmit="return confirm('Re-key {{ user.username }}? The old QR code and installed phone will stop working until they scan the new QR code.');">
+                            <button type="submit" class="btn btn-small">Re-key</button>
+                        </form>
                         {% if user.id != current_user.id %}
                         <form method="POST" action="{{ url_for('adminDeleteUser', userId=user.id) }}"
                               onsubmit="return confirm('Delete user {{ user.username }}?');">
