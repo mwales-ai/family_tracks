@@ -1,5 +1,19 @@
 # Incomplete Tasks
 
+* [ ] Geofencing
+    * [ ] Geofences are associated with a person.  Don't track if person A goes in / out of person B's geofence
+    * [ ] Android debug says the client sees all the geofences, not only the user's
+    * [ ] Need a hysteresis, if we enter / leave the geofence, lets not trigger it for another 5 min
+* [ ] Tracking not staying enabled all the time
+    * [ ] Turning on tracking opens the Battery Optimization pop-up.  Open settings button doesn't do anything
+    * [ ] Is the battery saving feature turning tracking off?
+    * [ ] Put in the events if I turn off tracking, so I know it busted when tracking fails and I didn't turn it off
+* [ ] Version
+    * [ ] Put part of git hash / build date in the settings screen for Android App
+    * [ ] Put build date and git hash somewhere on web settings page
+* [ ] Speed on web track
+    * [ ] Replace slow, medium, fast with 6 colors.  One for each 20mph, with the last range beting 100mph+ (or equivalent in metric kmph)
+
 * [X] Settings screen has the events screen visible as well
 * [X] Debug screen
     * [X] Give it an icon like a lady bug or something, it has the same icon as settings
