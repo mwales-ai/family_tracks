@@ -153,7 +153,7 @@ The rebuild takes a few seconds. During this window:
   normal reporting interval, so no data gap beyond one interval)
 - The Android app does not queue packets, so 1-2 location points may be missed
 
-## If nginx.conf Has Local Changes
+## Editing nginx.conf
 
 The `setup.sh` script customizes `nginx.conf` with your domain name and cert paths.
 These changes are local to your server and not tracked in git. Use `git stash` /
@@ -165,6 +165,20 @@ git pull
 cp nginx.conf.local nginx.conf
 docker compose restart nginx
 ```
+
+**Always run `docker compose restart nginx` after editing `nginx.conf`.** The
+file is bind-mounted into the container, but nginx only reads it at startup —
+a `git pull` or text edit alone has no effect until the container restarts.
+Note that `docker compose build && docker compose up -d` rebuilds and restarts
+the *app* container but leaves nginx running with its old config.
+
+Common settings in `nginx.conf`:
+
+| Setting | Purpose |
+|---------|---------|
+| `client_max_body_size 50M` | Maximum upload size — must exceed APK size for admin APK upload, must exceed avatar size for user uploads. Symptom if too low: `413 Request Entity Too Large` |
+| `server_name yourdomain.com` | Substituted by `setup.sh`; do not revert to `_` |
+| `ssl_certificate` paths | Point to Let's Encrypt files in `./certbot/conf/` |
 
 # Adding Users
 
