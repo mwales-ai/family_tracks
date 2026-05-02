@@ -110,6 +110,9 @@ rm nginx.conf.tmp
 # Create certbot directories
 mkdir -p certbot/conf certbot/www
 
+# Capture build identity for the settings page
+./make-version.sh
+
 # Start the app and nginx (HTTP only)
 docker compose up -d familytracks nginx
 

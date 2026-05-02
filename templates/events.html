@@ -41,8 +41,16 @@
                         lastDate = dateStr;
                     }
 
-                    var icon = evt.eventType === 'enter' ? '&#9654;' : '&#9664;';
-                    var cls = evt.eventType === 'enter' ? 'event-enter' : 'event-exit';
+                    var icon, cls;
+                    if (evt.eventType === 'enter') {
+                        icon = '&#9654;'; cls = 'event-enter';
+                    } else if (evt.eventType === 'exit') {
+                        icon = '&#9664;'; cls = 'event-exit';
+                    } else if (evt.eventType === 'tracking_lost') {
+                        icon = '&#9888;'; cls = 'event-tracking-lost';
+                    } else {
+                        icon = '&#10003;'; cls = 'event-tracking-resumed';
+                    }
 
                     html += '<div class="timeline-event ' + cls + '">';
                     html += '<span class="event-time">' + timeStr + '</span>';

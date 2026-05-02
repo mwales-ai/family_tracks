@@ -3,6 +3,7 @@ import json
 import base64
 import math
 import threading
+import time
 
 from Crypto.Cipher import AES
 
@@ -10,8 +11,17 @@ from database import getDb
 
 UDP_LISTENER_DEBUG = False
 
+# Hysteresis: after a (user, fence) enter or exit event fires, suppress further
+# events for the same pair for this many seconds. Prevents repeated enter/exit
+# spam when the GPS jitter pushes the user across the fence boundary.
+GEOFENCE_HYSTERESIS_SECONDS = 5 * 60
+
 # Track each user's last known geofence state: {dbUserId: set(geofenceId)}
 theUserFenceState = {}
+
+# Last event timestamp per (dbUserId, fenceId) for hysteresis. Wall-clock
+# time.time(), not the packet timestamp, since GPS clocks can be off.
+theLastFenceEventAt = {}
 
 # Module-level key cache shared with the admin re-key path so we can drop
 # stale credentials without restarting the listener.
@@ -153,24 +163,16 @@ def checkGeofences(dbUserId, loc):
 
     db = getDb()
 
-    # Get ALL geofences (not just this user's — parents want to know
-    # when kids arrive at the kid's own geofences).
-    # Deduplicate by name so overlapping fences created by different users
-    # only trigger one event (e.g. multiple users each add "Home" at
-    # the same address).
-    fences = db.execute("SELECT * FROM geofences").fetchall()
-
-    # Group by name — keep only the first fence per unique name
-    seenNames = {}
-    uniqueFences = []
-    for f in fences:
-        if f["name"] not in seenNames:
-            seenNames[f["name"]] = True
-            uniqueFences.append(f)
+    # Only consider fences owned by this user. A fence owned by user B
+    # never fires for user A — so kids arriving at a parent's geofence
+    # only triggers events when the kid has their own fence at that spot.
+    fences = db.execute(
+        "SELECT * FROM geofences WHERE userId = ?", (dbUserId,)
+    ).fetchall()
 
     # Which geofences is the user currently inside?
     nowInside = set()
-    for f in uniqueFences:
+    for f in fences:
         dist = haversineMeters(lat, lon, f["latitude"], f["longitude"])
         if dist <= f["radiusMeters"]:
             nowInside.add(f["id"])
@@ -181,23 +183,40 @@ def checkGeofences(dbUserId, loc):
     entered = nowInside - prevInside
     exited = prevInside - nowInside
 
+    now = time.time()
+    fired = False
+
     for fenceId in entered:
+        last = theLastFenceEventAt.get((dbUserId, fenceId), 0)
+        if now - last < GEOFENCE_HYSTERESIS_SECONDS:
+            debugLog("Suppressed enter for user " + str(dbUserId) +
+                     " fence " + str(fenceId) + " (hysteresis)")
+            continue
         db.execute(
             "INSERT INTO geofenceEvents (userId, geofenceId, eventType, timestamp) "
             "VALUES (?, ?, 'enter', ?)",
             (dbUserId, fenceId, ts)
         )
+        theLastFenceEventAt[(dbUserId, fenceId)] = now
+        fired = True
         debugLog("User " + str(dbUserId) + " entered geofence " + str(fenceId))
 
     for fenceId in exited:
+        last = theLastFenceEventAt.get((dbUserId, fenceId), 0)
+        if now - last < GEOFENCE_HYSTERESIS_SECONDS:
+            debugLog("Suppressed exit for user " + str(dbUserId) +
+                     " fence " + str(fenceId) + " (hysteresis)")
+            continue
         db.execute(
             "INSERT INTO geofenceEvents (userId, geofenceId, eventType, timestamp) "
             "VALUES (?, ?, 'exit', ?)",
             (dbUserId, fenceId, ts)
         )
+        theLastFenceEventAt[(dbUserId, fenceId)] = now
+        fired = True
         debugLog("User " + str(dbUserId) + " exited geofence " + str(fenceId))
 
-    if entered or exited:
+    if fired:
         db.commit()
 
     db.close()

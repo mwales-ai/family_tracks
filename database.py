@@ -108,6 +108,17 @@ def initDb():
 
         CREATE INDEX IF NOT EXISTS idx_geofence_events_user
             ON geofenceEvents(userId, timestamp DESC);
+
+        CREATE TABLE IF NOT EXISTS trackingEvents (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId      INTEGER NOT NULL,
+            eventType   TEXT NOT NULL,
+            timestamp   TIMESTAMP NOT NULL,
+            FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tracking_events_time
+            ON trackingEvents(timestamp DESC);
     """)
 
     conn.commit()

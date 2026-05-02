@@ -118,7 +118,10 @@ git stash             # save any local changes (e.g. nginx.conf edits)
 git pull
 git stash pop         # restore local changes
 
-# 3. Rebuild and restart the container
+# 3. Capture the current git hash for the Settings → Server Version display
+./make-version.sh
+
+# 4. Rebuild and restart the container
 docker compose build
 docker compose up -d
 ```

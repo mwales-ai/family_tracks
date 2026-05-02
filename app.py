@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import sqlite3
+import subprocess
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -19,6 +20,116 @@ from udp_listener import startUdpThread, invalidateUserInCache
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 app.permanent_session_lifetime = timedelta(days=7)
+
+
+def loadVersionInfo():
+    """Return (gitHash, buildDate) — read once at startup.
+
+    Order of preference:
+      1. version.txt in the working directory (written by build script /
+         setup.sh; survives Docker COPY . . even when .git is excluded)
+      2. live `git` query (works when running from a clone in dev)
+      3. ('unknown', 'unknown')
+    """
+    if os.path.exists("version.txt"):
+        try:
+            with open("version.txt", "r") as fp:
+                lines = [ln.strip() for ln in fp.readlines() if ln.strip()]
+            if len(lines) >= 2:
+                return (lines[0], lines[1])
+            if len(lines) == 1:
+                return (lines[0], "unknown")
+        except (IOError, OSError):
+            pass
+
+    try:
+        h = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+        d = subprocess.check_output(
+            ["git", "log", "-1", "--format=%cd", "--date=short"],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+        return (h, d)
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return ("unknown", "unknown")
+
+
+GIT_HASH, BUILD_DATE = loadVersionInfo()
+
+
+# Tracking-state heartbeat: how long without a location packet before we
+# call a user "tracking lost" and log a visible event.
+TRACKING_LOST_AFTER_SECONDS = 5 * 60
+TRACKING_CHECK_INTERVAL_SECONDS = 60
+
+# In-memory state {dbUserId: bool} — True if currently 'lost'.
+theTrackingState = {}
+
+
+def heartbeatTick():
+    """One sweep of the tracking-state heartbeat. Emits a 'lost' event when
+    a user's most recent location ages past TRACKING_LOST_AFTER_SECONDS, and
+    a 'resumed' event the next time we see them.
+
+    Runs in a background thread, started once at app boot."""
+    db = getDb()
+    rows = db.execute("""
+        SELECT u.id, u.displayName,
+               (SELECT MAX(timestamp) FROM locations WHERE userId = u.id) AS lastTs
+        FROM users u
+    """).fetchall()
+
+    now = datetime.utcnow()
+    for r in rows:
+        userId = r["id"]
+        lastTs = r["lastTs"]
+        wasLost = theTrackingState.get(userId, False)
+
+        if not lastTs:
+            # User has never sent a packet — don't bother flagging.
+            continue
+
+        try:
+            lastDt = datetime.fromisoformat(lastTs)
+        except (ValueError, TypeError):
+            continue
+
+        ageSeconds = (now - lastDt).total_seconds()
+        isLost = ageSeconds > TRACKING_LOST_AFTER_SECONDS
+
+        if isLost and not wasLost:
+            db.execute(
+                "INSERT INTO trackingEvents (userId, eventType, timestamp) "
+                "VALUES (?, 'lost', ?)",
+                (userId, now.isoformat(timespec="seconds"))
+            )
+            theTrackingState[userId] = True
+        elif not isLost and wasLost:
+            db.execute(
+                "INSERT INTO trackingEvents (userId, eventType, timestamp) "
+                "VALUES (?, 'resumed', ?)",
+                (userId, now.isoformat(timespec="seconds"))
+            )
+            theTrackingState[userId] = False
+
+    db.commit()
+    db.close()
+
+
+def startHeartbeatThread():
+    """Spawn the heartbeat sweep on a daemon thread."""
+    import threading
+    def loop():
+        while True:
+            try:
+                heartbeatTick()
+            except Exception as e:
+                print("[heartbeat] error: " + str(e))
+            time.sleep(TRACKING_CHECK_INTERVAL_SECONDS)
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
 
 # Rate limiting: track failed login attempts per IP
 theLoginAttempts = defaultdict(list)
@@ -191,13 +302,14 @@ def apiLatestLocations():
 @app.route("/api/geofence-events")
 @login_required
 def apiGeofenceEvents():
-    """Get recent geofence events for all users."""
+    """Get recent geofence + tracking events merged into a single timeline.
+    Endpoint name kept for the mobile app, which expects this URL."""
     limit = request.args.get("limit", 50, type=int)
     since = request.args.get("since", None)
     db = getDb()
 
     if since:
-        rows = db.execute("""
+        geoRows = db.execute("""
             SELECT ge.id, ge.eventType, ge.timestamp,
                    u.displayName,
                    g.name as geofenceName
@@ -208,8 +320,17 @@ def apiGeofenceEvents():
             ORDER BY ge.timestamp DESC
             LIMIT ?
         """, (since, limit)).fetchall()
+        trackRows = db.execute("""
+            SELECT te.id, te.eventType, te.timestamp,
+                   u.displayName
+            FROM trackingEvents te
+            JOIN users u ON u.id = te.userId
+            WHERE te.timestamp >= ?
+            ORDER BY te.timestamp DESC
+            LIMIT ?
+        """, (since, limit)).fetchall()
     else:
-        rows = db.execute("""
+        geoRows = db.execute("""
             SELECT ge.id, ge.eventType, ge.timestamp,
                    u.displayName,
                    g.name as geofenceName
@@ -219,13 +340,21 @@ def apiGeofenceEvents():
             ORDER BY ge.timestamp DESC
             LIMIT ?
         """, (limit,)).fetchall()
+        trackRows = db.execute("""
+            SELECT te.id, te.eventType, te.timestamp,
+                   u.displayName
+            FROM trackingEvents te
+            JOIN users u ON u.id = te.userId
+            ORDER BY te.timestamp DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
     db.close()
 
     result = []
-    for r in rows:
+    for r in geoRows:
         verb = "arrived at" if r["eventType"] == "enter" else "left"
         result.append({
-            "id": r["id"],
+            "id": "geo-" + str(r["id"]),
             "displayName": r["displayName"],
             "geofenceName": r["geofenceName"],
             "eventType": r["eventType"],
@@ -233,7 +362,23 @@ def apiGeofenceEvents():
             "timestamp": r["timestamp"]
         })
 
-    return jsonify(result)
+    for r in trackRows:
+        if r["eventType"] == "lost":
+            msg = "Tracking lost for " + r["displayName"]
+        else:
+            msg = "Tracking resumed for " + r["displayName"]
+        result.append({
+            "id": "track-" + str(r["id"]),
+            "displayName": r["displayName"],
+            "geofenceName": None,
+            "eventType": "tracking_" + r["eventType"],
+            "message": msg,
+            "timestamp": r["timestamp"]
+        })
+
+    # Sort merged list newest-first, then trim to limit
+    result.sort(key=lambda e: e["timestamp"], reverse=True)
+    return jsonify(result[:limit])
 
 
 @app.route("/api/locations/history")
@@ -737,7 +882,8 @@ def settings():
     ).fetchall()
     db.close()
 
-    return render_template("settings.html", geofences=geofences)
+    return render_template("settings.html", geofences=geofences,
+                           gitHash=GIT_HASH, buildDate=BUILD_DATE)
 
 
 @app.route("/settings/timezone", methods=["POST"])
@@ -904,14 +1050,18 @@ def apiGeofences():
 @app.route("/api/geofences/all")
 @login_required
 def apiAllGeofences():
-    """Get all geofences for all users (used by mobile app sync)."""
+    """Geofences relevant to the requesting user (used by the mobile app
+    for periodic sync). Returns only fences owned by the requester — events
+    are scoped per-owner, so a phone never needs to know about other people's
+    fences."""
     db = getDb()
     rows = db.execute("""
         SELECT g.*, u.displayName as ownerName
         FROM geofences g
         JOIN users u ON u.id = g.userId
+        WHERE g.userId = ?
         ORDER BY g.name
-    """).fetchall()
+    """, (current_user.id,)).fetchall()
     db.close()
 
     result = []
@@ -956,5 +1106,6 @@ if __name__ == "__main__":
 
     udpPort = int(os.environ.get("UDP_PORT", 5555))
     startUdpThread(udpPort)
+    startHeartbeatThread()
 
     app.run(host="0.0.0.0", port=5000, debug=True)

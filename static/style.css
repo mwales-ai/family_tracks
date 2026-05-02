@@ -534,6 +534,14 @@ body {
     color: #e74c3c;
 }
 
+.event-tracking-lost .event-icon {
+    color: #f39c12;
+}
+
+.event-tracking-resumed .event-icon {
+    color: #3498db;
+}
+
 .event-msg {
     flex: 1;
 }

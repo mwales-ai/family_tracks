@@ -237,21 +237,10 @@
                         return;
                     }
 
-                    // Color segments by speed: blue (slow) -> green -> yellow -> red (fast)
-                    var maxSpd = 0;
-                    data.forEach(function(p) {
-                        if (p.speed !== null && p.speed > maxSpd) maxSpd = p.speed;
-                    });
-                    if (maxSpd < 1) maxSpd = 1;
-
                     var segments = [];
                     for (var j = 1; j < data.length; j++) {
                         var spd = data[j].speed || 0;
-                        var ratio = Math.min(spd / maxSpd, 1);
-                        var segColor;
-                        if (ratio < 0.33) segColor = '#3498db';
-                        else if (ratio < 0.66) segColor = '#2ecc71';
-                        else segColor = '#e74c3c';
+                        var segColor = speedBucketColor(spd);
 
                         var seg = L.polyline([
                             [data[j-1].latitude, data[j-1].longitude],
@@ -314,15 +303,48 @@
             });
         });
 
+    // Speed buckets — 6 colors. Imperial: 20 mph steps, last is 100+ mph.
+    // Metric: 30 km/h steps (close to 20 mph), last is 150+ km/h.
+    // Thresholds stored in m/s.
+    var SPEED_COLORS = ['#2196F3', '#00BCD4', '#4CAF50', '#FFC107', '#FF9800', '#F44336'];
+
+    function speedThresholds() {
+        if (window.USER_UNITS === 'imperial') {
+            // 20, 40, 60, 80, 100 mph in m/s
+            return [8.94, 17.88, 26.82, 35.76, 44.70];
+        }
+        // 30, 60, 90, 120, 150 km/h in m/s
+        return [8.33, 16.67, 25.00, 33.33, 41.67];
+    }
+
+    function speedBucketColor(mps) {
+        var th = speedThresholds();
+        for (var i = 0; i < th.length; i++) {
+            if (mps < th[i]) return SPEED_COLORS[i];
+        }
+        return SPEED_COLORS[5];
+    }
+
+    function speedBucketLabels() {
+        if (window.USER_UNITS === 'imperial') {
+            return ['0–20 mph', '20–40 mph', '40–60 mph',
+                    '60–80 mph', '80–100 mph', '100+ mph'];
+        }
+        return ['0–30 km/h', '30–60 km/h', '60–90 km/h',
+                '90–120 km/h', '120–150 km/h', '150+ km/h'];
+    }
+
     // Speed legend (shown when track history is visible)
     var legendControl = L.control({position: 'bottomright'});
     legendControl.onAdd = function() {
         var div = L.DomUtil.create('div', 'speed-legend');
-        div.innerHTML =
-            '<b>Track Speed</b><br>' +
-            '<span style="background:#3498db"></span> Slow<br>' +
-            '<span style="background:#2ecc71"></span> Medium<br>' +
-            '<span style="background:#e74c3c"></span> Fast';
+        var labels = speedBucketLabels();
+        var html = '<b>Track Speed</b><br>';
+        for (var i = 0; i < SPEED_COLORS.length; i++) {
+            html += '<span style="background:' + SPEED_COLORS[i] + '"></span> ' +
+                    labels[i] + '<br>';
+        }
+        div.innerHTML = html;
         return div;
     };
     var legendVisible = false;
